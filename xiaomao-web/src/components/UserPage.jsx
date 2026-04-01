@@ -689,9 +689,12 @@ function UserPage() {
       ) : (
         <LoginForm onSwitchToRegister={() => setShowRegister(true)} />
       )}
-      {/* 管理员入口 */}
+      {/* 管理员入口 - 跳转登录页并标记管理员模式 */}
       <div
-        onClick={() => navigate('/admin')}
+        onClick={() => {
+          sessionStorage.setItem('admin_login', '1')
+          setShowRegister(false)
+        }}
         style={{
           textAlign: 'center',
           marginTop: '32px',

@@ -1,12 +1,16 @@
 /* ========================================
    小贸 - 管理后台页面
-   用户管理 + 用户统计
+   重新设计：统计概览 + 用户管理 + 系统信息
    仅admin角色可访问
    ======================================== */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
-import { Shield, Users, BarChart3, ArrowLeft, RefreshCw, Calendar, BookOpen } from 'lucide-react'
+import {
+  Shield, Users, BarChart3, ArrowLeft, RefreshCw,
+  Calendar, BookOpen, Activity, Clock, UserPlus,
+  Trash2, Eye, Server, Database, Cpu
+} from 'lucide-react'
 
 /* API基础路径 */
 const API_BASE = '/api/admin'
@@ -31,9 +35,39 @@ function formatDateTime(dateStr) {
 }
 
 /**
+ * 统计卡片组件
+ */
+function StatCard({ icon: Icon, label, value, color, sub }) {
+  return (
+    <div style={{
+      background: 'var(--card-bg)',
+      border: '1px solid var(--card-border)',
+      borderRadius: '16px',
+      padding: '20px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{label}</span>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '10px',
+          background: `${color}15`, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={16} style={{ color }} />
+        </div>
+      </div>
+      <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{sub}</div>}
+    </div>
+  )
+}
+
+/**
  * 用户统计面板
  */
-function UserStatsPanel({ userId, onBack }) {
+function UserStatsPanel({ userId, username, onBack }) {
   const { token } = useUser()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -53,7 +87,7 @@ function UserStatsPanel({ userId, onBack }) {
         } else {
           setError(data.message || '获取统计失败')
         }
-      } catch (err) {
+      } catch {
         setError('网络错误，请稍后重试')
       } finally {
         setLoading(false)
@@ -67,90 +101,62 @@ function UserStatsPanel({ userId, onBack }) {
       <button
         onClick={onBack}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          background: 'none',
-          border: 'none',
-          color: 'var(--text-secondary)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          marginBottom: '16px',
-          padding: '4px 0',
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          background: 'none', border: 'none',
+          color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer',
+          marginBottom: '16px', padding: '4px 0',
         }}
       >
-        <ArrowLeft size={16} />
-        返回用户列表
+        <ArrowLeft size={16} /> 返回用户列表
       </button>
 
-      <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: 'var(--text-primary)' }}>
-        用户数据统计
+      <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>
+        {username} 的数据统计
       </h3>
 
       {loading && (
-        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '13px' }}>
-          加载中...
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+          <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
+          <div style={{ marginTop: '8px', fontSize: '13px' }}>加载中...</div>
         </div>
       )}
 
       {error && (
         <div style={{
-          padding: '12px 16px',
-          background: '#FEF2F2',
-          color: '#991B1B',
-          borderRadius: '8px',
-          fontSize: '13px',
-        }}>
-          {error}
-        </div>
+          padding: '12px 16px', background: '#FEF2F2', color: '#991B1B',
+          borderRadius: '8px', fontSize: '13px',
+        }}>{error}</div>
       )}
 
       {stats && !loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* 课表缓存 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div style={{
-            padding: '16px',
-            background: 'var(--card-bg)',
-            border: '1px solid var(--card-border)',
-            borderRadius: '12px',
+            padding: '16px', background: 'var(--card-bg)',
+            border: '1px solid var(--card-border)', borderRadius: '12px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
               <Calendar size={16} style={{ color: 'var(--primary)' }} />
               <span style={{ fontSize: '14px', fontWeight: 600 }}>课表缓存</span>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              <div>缓存状态：{stats.scheduleCached ? '已缓存' : '未缓存'}</div>
-              {stats.scheduleCachedAt && (
-                <div>缓存时间：{formatDateTime(stats.scheduleCachedAt)}</div>
-              )}
-              {stats.scheduleCourseCount !== undefined && (
-                <div>课程数量：{stats.scheduleCourseCount} 门</div>
-              )}
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>状态：{stats.scheduleCached ? '✅ 已缓存' : '❌ 未缓存'}</div>
+              {stats.scheduleCachedAt && <div>时间：{formatDateTime(stats.scheduleCachedAt)}</div>}
+              {stats.scheduleCourseCount !== undefined && <div>课程：{stats.scheduleCourseCount} 门</div>}
             </div>
           </div>
-
-          {/* 成绩缓存 */}
           <div style={{
-            padding: '16px',
-            background: 'var(--card-bg)',
-            border: '1px solid var(--card-border)',
-            borderRadius: '12px',
+            padding: '16px', background: 'var(--card-bg)',
+            border: '1px solid var(--card-border)', borderRadius: '12px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <BookOpen size={16} style={{ color: 'var(--primary)' }} />
+              <BookOpen size={16} style={{ color: '#10B981' }} />
               <span style={{ fontSize: '14px', fontWeight: 600 }}>成绩缓存</span>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              <div>缓存状态：{stats.gradesCached ? '已缓存' : '未缓存'}</div>
-              {stats.gradesCachedAt && (
-                <div>缓存时间：{formatDateTime(stats.gradesCachedAt)}</div>
-              )}
-              {stats.gradesCount !== undefined && (
-                <div>成绩记录：{stats.gradesCount} 条</div>
-              )}
-              {stats.gradesGPA !== undefined && (
-                <div>GPA：{stats.gradesGPA}</div>
-              )}
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>状态：{stats.gradesCached ? '✅ 已缓存' : '❌ 未缓存'}</div>
+              {stats.gradesCachedAt && <div>时间：{formatDateTime(stats.gradesCachedAt)}</div>}
+              {stats.gradesCount !== undefined && <div>记录：{stats.gradesCount} 条</div>}
+              {stats.gradesGPA !== undefined && <div>GPA：{stats.gradesGPA}</div>}
             </div>
           </div>
         </div>
@@ -169,31 +175,63 @@ function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedUsername, setSelectedUsername] = useState('')
+  const [activeTab, setActiveTab] = useState('overview')
 
-  /* 权限检查：非admin角色重定向 */
-  if (!user || user.role !== 'admin') {
+  /* 未登录 → 引导登录 */
+  if (!user) {
     return (
       <div style={{
-        maxWidth: '400px',
-        margin: '0 auto',
-        padding: '40px 20px',
-        textAlign: 'center',
+        maxWidth: '400px', margin: '0 auto', padding: '60px 20px', textAlign: 'center',
       }}>
-        <Shield size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>无权访问</h2>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-          管理后台仅限管理员访问
+        <div style={{
+          width: '72px', height: '72px', borderRadius: '50%',
+          background: '#EEF2FF', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', margin: '0 auto 20px',
+        }}>
+          <Shield size={32} style={{ color: 'var(--primary)' }} />
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px' }}>管理后台</h2>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6 }}>
+          请先使用管理员账号登录
+        </p>
+        <button
+          onClick={() => navigate('/user')}
+          style={{
+            width: '100%', padding: '12px', borderRadius: '12px',
+            border: 'none', background: 'var(--primary)', color: '#fff',
+            fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          前往登录
+        </button>
+      </div>
+    )
+  }
+
+  /* 非管理员 → 无权提示 */
+  if (user.role !== 'admin') {
+    return (
+      <div style={{
+        maxWidth: '400px', margin: '0 auto', padding: '60px 20px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: '72px', height: '72px', borderRadius: '50%',
+          background: '#FEF2F2', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', margin: '0 auto 20px',
+        }}>
+          <Shield size={32} style={{ color: '#EF4444' }} />
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px' }}>无权访问</h2>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+          管理后台仅限管理员账号访问
         </p>
         <button
           onClick={() => navigate('/chat')}
           style={{
-            padding: '8px 20px',
-            borderRadius: '8px',
-            border: '1px solid var(--card-border)',
-            background: 'var(--card-bg)',
-            color: 'var(--text-secondary)',
-            fontSize: '14px',
-            cursor: 'pointer',
+            padding: '10px 24px', borderRadius: '10px',
+            border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+            color: 'var(--text-secondary)', fontSize: '14px', cursor: 'pointer',
           }}
         >
           返回首页
@@ -216,141 +254,277 @@ function AdminPage() {
       } else {
         setError(data.message || '获取用户列表失败')
       }
-    } catch (err) {
+    } catch {
       setError('网络错误，请稍后重试')
     } finally {
       setLoading(false)
     }
   }
 
-  /* 首次加载获取用户列表 */
-  useEffect(() => {
-    fetchUsers()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  /* 删除用户 */
+  const deleteUser = async (userId, username) => {
+    if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) return
+    try {
+      const res = await fetch(`${API_BASE}/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.success) {
+        fetchUsers()
+      } else {
+        alert(data.message || '删除失败')
+      }
+    } catch {
+      alert('网络错误')
+    }
+  }
 
-  /* 查看用户统计 */
+  useEffect(() => { fetchUsers() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* 统计数据 */
+  const totalUsers = users.length
+  const adminUsers = users.filter(u => u.role === 'admin').length
+  const connectedUsers = users.filter(u => u.eduConnected).length
+  const todayUsers = users.filter(u => {
+    if (!u.lastLoginAt) return false
+    const today = new Date().toDateString()
+    return new Date(u.lastLoginAt).toDateString() === today
+  }).length
+
+  /* 用户详情视图 */
   if (selectedUserId) {
     return (
-      <div className="admin-page" style={{ padding: '24px' }}>
+      <div style={{ padding: '20px' }}>
         <UserStatsPanel
           userId={selectedUserId}
-          onBack={() => setSelectedUserId(null)}
+          username={selectedUsername}
+          onBack={() => { setSelectedUserId(null); setSelectedUsername('') }}
         />
       </div>
     )
   }
 
+  /* Tab 栏 */
+  const tabs = [
+    { key: 'overview', label: '概览', icon: BarChart3 },
+    { key: 'users', label: '用户管理', icon: Users },
+  ]
+
   return (
-    <div className="admin-page" style={{ padding: '24px' }}>
+    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* 页面标题 */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 className="page-title">管理后台</h1>
-          <p className="page-desc">用户管理与数据统计</p>
-        </div>
-        <button
-          className="refresh-btn"
-          onClick={fetchUsers}
-          disabled={loading}
-        >
-          <RefreshCw size={12} />
-          刷新
-        </button>
+      <div>
+        <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '4px' }}>管理后台</h1>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>系统管理与数据监控</p>
       </div>
 
-      {/* 加载中 */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '13px' }}>
-          加载中...
+      {/* Tab 切换 */}
+      <div style={{
+        display: 'flex', gap: '4px', background: 'var(--bg-secondary)',
+        borderRadius: '12px', padding: '4px',
+      }}>
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              flex: 1, padding: '10px', borderRadius: '10px', border: 'none',
+              background: activeTab === tab.key ? 'var(--card-bg)' : 'transparent',
+              color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontSize: '13px', fontWeight: activeTab === tab.key ? 600 : 400,
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: '6px',
+              boxShadow: activeTab === tab.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            <tab.icon size={14} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 概览 Tab */}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <StatCard icon={Users} label="总用户数" value={totalUsers} color="#6366F1" sub={`管理员 ${adminUsers} 人`} />
+            <StatCard icon={UserPlus} label="今日活跃" value={todayUsers} color="#10B981" sub="今日登录用户" />
+            <StatCard icon={Activity} label="教务已连接" value={connectedUsers} color="#F59E0B" sub={`占比 ${totalUsers > 0 ? Math.round(connectedUsers / totalUsers * 100) : 0}%`} />
+            <StatCard icon={Clock} label="系统运行" value="正常" color="#3B82F6" sub="所有服务正常" />
+          </div>
+
+          {/* 最近注册用户 */}
+          <div style={{
+            background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+            borderRadius: '16px', padding: '16px',
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>最近注册用户</div>
+            {users.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>暂无用户</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[...users]
+                  .sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))
+                  .slice(0, 5)
+                  .map(u => (
+                    <div key={u.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '10px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px', height: '32px', borderRadius: '50%',
+                          background: '#EEF2FF', display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', fontSize: '14px', fontWeight: 600,
+                          color: 'var(--primary)',
+                        }}>
+                          {(u.nickname || u.username || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 500 }}>{u.nickname || u.username}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {formatDateTime(u.createdAt || u.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: '11px', padding: '2px 8px', borderRadius: '6px',
+                        background: u.role === 'admin' ? '#EEF2FF' : '#F3F4F6',
+                        color: u.role === 'admin' ? '#6366F1' : '#6B7280',
+                      }}>
+                        {u.role === 'admin' ? '管理员' : '用户'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* 错误提示 */}
-      {error && (
-        <div style={{
-          padding: '12px 16px',
-          background: '#FEF2F2',
-          color: '#991B1B',
-          borderRadius: '8px',
-          fontSize: '13px',
-          marginBottom: '16px',
-        }}>
-          {error}
-        </div>
-      )}
+      {/* 用户管理 Tab */}
+      {activeTab === 'users' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* 操作栏 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              共 {totalUsers} 位用户
+            </span>
+            <button
+              onClick={fetchUsers}
+              disabled={loading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '6px 12px', borderRadius: '8px',
+                border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+                color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer',
+              }}
+            >
+              <RefreshCw size={12} /> 刷新
+            </button>
+          </div>
 
-      {/* 用户列表表格 */}
-      {!loading && !error && (
-        <div style={{
-          background: 'var(--card-bg)',
-          border: '1px solid var(--card-border)',
-          borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden',
-        }}>
-          {users.length === 0 ? (
+          {/* 错误提示 */}
+          {error && (
             <div style={{
-              textAlign: 'center',
-              padding: '40px',
-              color: 'var(--text-muted)',
-              fontSize: '14px',
-            }}>
+              padding: '12px 16px', background: '#FEF2F2', color: '#991B1B',
+              borderRadius: '8px', fontSize: '13px',
+            }}>{error}</div>
+          )}
+
+          {/* 加载中 */}
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+              <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
+              <div style={{ marginTop: '8px', fontSize: '13px' }}>加载中...</div>
+            </div>
+          )}
+
+          {/* 用户卡片列表 */}
+          {!loading && !error && users.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '14px' }}>
               暂无用户数据
             </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="admin-user-table">
-                <thead>
-                  <tr>
-                    <th>用户名</th>
-                    <th>昵称</th>
-                    <th>角色</th>
-                    <th>注册时间</th>
-                    <th>最后登录</th>
-                    <th>教务连接</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id || u._id}>
-                      <td style={{ fontWeight: 500 }}>{u.username}</td>
-                      <td style={{ color: 'var(--text-secondary)' }}>{u.nickname || '-'}</td>
-                      <td>
-                        <span className={`admin-badge ${u.role === 'admin' ? 'admin' : 'user'}`}>
-                          {u.role === 'admin' ? '管理员' : '用户'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {formatDateTime(u.createdAt || u.registeredAt)}
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {formatDateTime(u.lastLoginAt || u.updatedAt)}
-                      </td>
-                      <td>
-                        <span className={`admin-badge ${u.eduConnected ? 'connected' : 'user'}`}>
-                          {u.eduConnected ? '已连接' : '未连接'}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => setSelectedUserId(u.id || u._id)}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid var(--card-border)',
-                            background: 'var(--bg-secondary)',
-                            color: 'var(--text-secondary)',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          统计
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          )}
+
+          {!loading && !error && users.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {users.map(u => (
+                <div key={u.id} style={{
+                  background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                  borderRadius: '14px', padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                }}>
+                  {/* 头像 */}
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+                    background: u.avatar ? 'transparent' : '#EEF2FF',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: u.avatar ? '20px' : '16px', fontWeight: 600,
+                    color: 'var(--primary)', overflow: 'hidden',
+                  }}>
+                    {u.avatar || (u.nickname || u.username || '?')[0].toUpperCase()}
+                  </div>
+
+                  {/* 用户信息 */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {u.nickname || u.username}
+                      </span>
+                      <span style={{
+                        fontSize: '10px', padding: '1px 6px', borderRadius: '4px',
+                        background: u.role === 'admin' ? '#EEF2FF' : '#F3F4F6',
+                        color: u.role === 'admin' ? '#6366F1' : '#9CA3AF',
+                        fontWeight: 500,
+                      }}>
+                        {u.role === 'admin' ? '管理员' : '用户'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      @{u.username}
+                      {u.eduConnected && (
+                        <span style={{ color: '#10B981', marginLeft: '8px' }}>● 教务已连接</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      注册：{formatDateTime(u.createdAt || u.created_at)}
+                      {u.lastLoginAt && ` · 最近登录：${formatDateTime(u.lastLoginAt)}`}
+                    </div>
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => { setSelectedUserId(u.id); setSelectedUsername(u.nickname || u.username) }}
+                      style={{
+                        width: '32px', height: '32px', borderRadius: '8px',
+                        border: '1px solid var(--card-border)', background: 'var(--bg-secondary)',
+                        color: 'var(--text-secondary)', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="查看统计"
+                    >
+                      <Eye size={14} />
+                    </button>
+                    {u.role !== 'admin' && (
+                      <button
+                        onClick={() => deleteUser(u.id, u.username)}
+                        style={{
+                          width: '32px', height: '32px', borderRadius: '8px',
+                          border: '1px solid #FECACA', background: '#FEF2F2',
+                          color: '#EF4444', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        title="删除用户"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
