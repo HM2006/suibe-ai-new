@@ -12,6 +12,7 @@ import {
   Newspaper,
   Sparkles,
   User as UserIcon,
+  Award,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -23,6 +24,7 @@ const navItems = [
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
   { path: '/campus/library', label: '图书馆', icon: BookOpen },
   { path: '/campus/news', label: '资讯', icon: Newspaper },
+  { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
 /* 根据当前路径获取页面标题 */
@@ -35,6 +37,7 @@ function getPageTitle(pathname) {
     '/campus/grades': { title: '成绩查询', subtitle: '查看各科成绩' },
     '/campus/library': { title: '图书馆', subtitle: '借阅与图书管理' },
     '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
+    '/scholarship': { title: '奖学金计算器', subtitle: '综合测评分数计算' },
   }
   return titleMap[pathname] || { title: '小贸', subtitle: '校园AI助手' }
 }

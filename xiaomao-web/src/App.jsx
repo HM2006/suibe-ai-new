@@ -14,6 +14,7 @@ import LibraryPage from './components/LibraryPage'
 import NewsPage from './components/NewsPage'
 import UserPage from './components/UserPage'
 import AdminPage from './components/AdminPage'
+import ScholarshipPage from './components/ScholarshipPage'
 
 function App() {
   return (
@@ -48,6 +49,9 @@ function App() {
 
         {/* 管理后台 */}
         <Route path="/admin" element={<Layout><AdminPage /></Layout>} />
+
+        {/* 奖学金计算器 */}
+        <Route path="/scholarship" element={<Layout><ScholarshipPage /></Layout>} />
       </Routes>
     </UserProvider>
   )
