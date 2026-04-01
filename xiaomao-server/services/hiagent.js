@@ -9,24 +9,68 @@
  * 2. chat_query (SSE) → 流式对话
  */
 
-const axios = require('axios');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 const { v4: uuidv4 } = require('uuid');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // 配置
 const API_BASE = process.env.HIAGENT_API_BASE || 'https://agent.suibe.edu.cn/api/proxy/api/v1';
-const API_KEY = process.env.HIAGENT_API_KEY || 'd76k0fmlvnd86k4unlqg';
+const API_KEY = process.env.HIAGENT_API_KEY || '';
+
+// 代理配置（从环境变量读取）
+const PROXY_URL = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || null;
+const proxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
 /**
- * 创建 axios 实例
+ * 通用 HTTPS 请求（支持代理）
  */
-const httpClient = axios.create({
-  baseURL: API_BASE,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Apikey': API_KEY,
-  },
-});
+function request(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const fullPath = API_BASE + path;
+    const url = new URL(fullPath);
+    const isHttps = url.protocol === 'https:';
+    const payload = body ? JSON.stringify(body) : '';
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Apikey': API_KEY,
+      },
+      ...(proxyAgent ? { agent: proxyAgent } : {}),
+    };
+
+    if (payload) {
+      options.headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+
+    const req = (isHttps ? https : http).request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve({ status: res.statusCode, data: parsed, raw: data });
+        } catch {
+          resolve({ status: res.statusCode, data: data, raw: data });
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(120000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
 
 /**
  * 创建会话
@@ -36,9 +80,14 @@ const httpClient = axios.create({
 async function createConversation(userId) {
   console.log(`[HiAgent] 创建会话, userId=${userId}`);
 
-  const response = await httpClient.post('/create_conversation', {
+  const response = await request('POST', '/create_conversation', {
     UserID: userId,
   });
+
+  if (response.status !== 200) {
+    console.error('[HiAgent] 创建会话失败:', response.status, response.raw?.substring(0, 200));
+    throw new Error(`创建会话失败: HTTP ${response.status}`);
+  }
 
   const conversationId = response.data?.Conversation?.AppConversationID;
   if (!conversationId) {
@@ -59,69 +108,104 @@ async function createConversation(userId) {
 async function sendMessage(query, conversationId, userId = 'default-user') {
   let convId = conversationId;
 
-  // 如果没有会话 ID，先创建一个
   if (!convId) {
     convId = await createConversation(userId);
   }
 
   console.log(`[HiAgent] 发送消息: "${query.substring(0, 50)}..."`);
 
-  const response = await httpClient.post('/chat_query', {
+  const response = await request('POST', '/chat_query', {
     Query: query,
     AppConversationID: convId,
     ResponseMode: 'blocking',
     UserID: userId,
   });
 
-  const data = response.data;
-  // 非流式返回也是 SSE 格式，取最后一个 message_end 的 answer
-  const answer = data?.answer || '暂无回复';
+  // HiAgent blocking 模式也返回 SSE 格式，需要解析
+  let answer = '暂无回复';
+  const raw = response.raw || '';
+
+  // 尝试从 SSE 格式中提取 answer
+  const answerMatch = raw.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+  if (answerMatch && answerMatch.length > 0) {
+    // 取最后一个 answer（message_end 中的是完整回答）
+    const lastMatch = answerMatch[answerMatch.length - 1];
+    const extracted = lastMatch.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (extracted) {
+      answer = extracted[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"');
+    }
+  } else if (typeof response.data === 'string') {
+    answer = response.data;
+  } else if (response.data?.answer) {
+    answer = response.data.answer;
+  }
 
   return {
-    answer,
+    answer: typeof answer === 'string' ? answer : JSON.stringify(answer),
     conversationId: convId,
-    messageId: data?.id || uuidv4(),
+    messageId: response.data?.id || uuidv4(),
   };
 }
 
 /**
- * 发送消息（流式 SSE）
+ * 发送消息（流式 SSE）- 返回原始响应流
  * @param {string} query - 用户消息
  * @param {string} conversationId - 会话 ID
  * @param {string} userId - 用户标识
- * @returns {Promise<import('axios').AxiosResponse>} axios 流式响应
+ * @returns {Promise<http.IncomingMessage>} 原始响应流
  */
 async function sendMessageStream(query, conversationId, userId = 'default-user') {
   let convId = conversationId;
 
-  // 如果没有会话 ID，先创建一个
   if (!convId) {
     convId = await createConversation(userId);
   }
 
   console.log(`[HiAgent] 发送流式消息: "${query.substring(0, 50)}..."`);
 
-  const response = await httpClient.post('/chat_query', {
-    Query: query,
-    AppConversationID: convId,
-    ResponseMode: 'streaming',
-    UserID: userId,
-  }, {
-    headers: {
-      'Accept': 'text/event-stream',
-    },
-    responseType: 'stream',
-  });
+  return new Promise((resolve, reject) => {
+    const fullPath = API_BASE + '/chat_query';
+    const url = new URL(fullPath);
+    const isHttps = url.protocol === 'https:';
+    const payload = JSON.stringify({
+      Query: query,
+      AppConversationID: convId,
+      ResponseMode: 'streaming',
+      UserID: userId,
+    });
 
-  // 把 convId 存到 response 对象上，方便后续使用
-  response._conversationId = convId;
-  return response;
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Apikey': API_KEY,
+        'Accept': 'text/event-stream',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      ...(proxyAgent ? { agent: proxyAgent } : {}),
+    };
+
+    const req = (isHttps ? https : http).request(options, (res) => {
+      res._conversationId = convId;
+      resolve(res);
+    });
+
+    req.on('error', reject);
+    req.setTimeout(120000, () => {
+      req.destroy(new Error('请求超时'));
+    });
+
+    req.write(payload);
+    req.end();
+  });
 }
 
 /**
  * 解析 HiAgent SSE 事件流
  * HiAgent SSE 格式：每行 "data: {json}"
- * json 中 event 字段标识事件类型
  *
  * @param {import('stream').Readable} stream
  * @param {Function} onMessage - (text: string) => void
@@ -153,7 +237,6 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
 
           switch (event) {
             case 'message':
-              // 消息片段
               if (data.answer) {
                 fullAnswer += data.answer;
                 onMessage(data.answer);
@@ -163,7 +246,6 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
               break;
 
             case 'message_end':
-              // 消息结束
               if (data.answer) fullAnswer += data.answer;
               if (data.conversation_id) conversationId = data.conversation_id;
               if (data.id) messageId = data.id;
@@ -183,7 +265,6 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
               fullAnswer = data.answer || '';
               break;
 
-            // 其他事件（agent_thought, knowledge_retrieve 等）忽略
             default:
               break;
           }
@@ -195,7 +276,6 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
   });
 
   stream.on('end', () => {
-    // 流结束，处理剩余 buffer
     if (buffer.trim()) {
       const trimmed = buffer.trim();
       if (trimmed.startsWith('data:')) {
