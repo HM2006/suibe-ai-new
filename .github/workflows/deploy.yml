@@ -1,0 +1,78 @@
+name: 自动部署到云服务器
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 部署到服务器
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            echo "=== 开始部署 ==="
+            
+            # 部署路径
+            DEPLOY_DIR="${{ secrets.DEPLOY_PATH }}"
+            
+            # 如果项目目录不存在，克隆仓库
+            if [ ! -d "$DEPLOY_DIR" ]; then
+              echo ">>> 首次部署，克隆仓库..."
+              mkdir -p "$(dirname "$DEPLOY_DIR")"
+              git clone https://github.com/HM2006/suibe-ai-new.git "$DEPLOY_DIR"
+            else
+              echo ">>> 拉取最新代码..."
+              cd "$DEPLOY_DIR"
+              git fetch origin
+              git reset --hard origin/main
+            fi
+            
+            cd "$DEPLOY_DIR"
+            
+            # 安装后端依赖
+            echo ">>> 安装后端依赖..."
+            cd xiaomao-server
+            npm install --production
+            
+            # 安装前端依赖并构建
+            echo ">>> 构建前端..."
+            cd ../xiaomao-web
+            npm install
+            npm run build
+            
+            # 复制构建产物到后端静态目录
+            echo ">>> 复制前端构建产物..."
+            rm -rf ../xiaomao-server/public
+            cp -r dist ../xiaomao-server/public
+            
+            # 使用 PM2 重启后端服务
+            echo ">>> 重启服务..."
+            cd ../xiaomao-server
+            
+            # 安装 PM2（如果未安装）
+            if ! command -v pm2 &> /dev/null; then
+              echo ">>> 安装 PM2..."
+              npm install -g pm2
+            fi
+            
+            # 停止旧进程（如果存在）
+            pm2 stop suibe-ai 2>/dev/null || true
+            pm2 delete suibe-ai 2>/dev/null || true
+            
+            # 启动新进程
+            pm2 start server.js --name suibe-ai
+            pm2 save
+            
+            echo "=== 部署完成 ==="
+            pm2 status
