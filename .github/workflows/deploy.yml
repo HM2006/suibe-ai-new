@@ -39,7 +39,15 @@ jobs:
             fi
             
             cd "$DEPLOY_DIR"
-            
+
+            # 生成 .env 文件（从 Secrets 写入，不提交到 Git）
+            echo ">>> 生成 .env 文件..."
+            cd xiaomao-server
+            cat > .env << ENVEOF
+            HIAGENT_API_BASE=${{ secrets.HIAGENT_API_BASE }}
+            HIAGENT_API_KEY=${{ secrets.HIAGENT_API_KEY }}
+            ENVEOF
+
             # 安装后端依赖
             echo ">>> 安装后端依赖..."
             cd xiaomao-server
