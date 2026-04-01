@@ -1,6 +1,6 @@
 /* ========================================
    小贸 - 校园导航页面
-   SVG简化版校园地图 + POI标记点列表
+   SVG简化版校园地图 + 真实POI标记点列表
    ======================================== */
 import { useState, useMemo } from 'react'
 import {
@@ -9,149 +9,213 @@ import {
   Building,
   BookOpen,
   Utensils,
-  Home,
   Dumbbell,
-  Coffee,
   GraduationCap,
   Trees,
-  Bus,
   ShoppingBag,
+  Camera
 } from 'lucide-react'
 
-/* 校园POI数据 */
+/* 提取真实校园POI数据 */
 const poiData = [
   {
     id: 1,
-    name: '第一教学楼',
-    category: '教学楼',
-    address: '校园中心区域',
-    description: '主要教学楼，设有阶梯教室和多媒体教室',
+    name: '图文信息大楼',
+    category: '办公/教学',
+    address: '校园中心广场',
+    description: '校园标志性建筑，行政与图文信息中心。',
     icon: Building,
     color: '#4F46E5',
-    x: 35,
-    y: 30,
+    x: 48,
+    y: 48,
   },
   {
     id: 2,
-    name: '第二教学楼',
-    category: '教学楼',
-    address: '校园东区',
-    description: '理工科教学楼，配有实验室',
-    icon: Building,
-    color: '#4F46E5',
-    x: 60,
-    y: 25,
-  },
-  {
-    id: 3,
     name: '图书馆',
     category: '学习',
-    address: '校园中心广场北侧',
-    description: '藏书100万册，设有自习室和电子阅览室',
+    address: '思源湖畔',
+    description: '藏书丰富，提供安静的学习自习空间。',
     icon: BookOpen,
     color: '#7C3AED',
-    x: 48,
-    y: 20,
-  },
-  {
-    id: 4,
-    name: '第一食堂',
-    category: '餐饮',
-    address: '学生公寓区西侧',
-    description: '提供早中晚餐，特色窗口：川菜、粤菜',
-    icon: Utensils,
-    color: '#DC2626',
-    x: 20,
-    y: 55,
-  },
-  {
-    id: 5,
-    name: '第二食堂',
-    category: '餐饮',
-    address: '教学楼南侧',
-    description: '提供早中晚餐，特色窗口：面食、麻辣烫',
-    icon: Utensils,
-    color: '#DC2626',
-    x: 45,
-    y: 50,
-  },
-  {
-    id: 6,
-    name: '学生公寓1号楼',
-    category: '住宿',
-    address: '校园西侧',
-    description: '本科生宿舍楼，4人间',
-    icon: Home,
-    color: '#059669',
-    x: 15,
-    y: 40,
-  },
-  {
-    id: 7,
-    name: '体育馆',
-    category: '运动',
-    address: '校园南侧',
-    description: '室内篮球场、羽毛球场、健身房',
-    icon: Dumbbell,
-    color: '#D97706',
-    x: 70,
+    x: 42,
     y: 60,
   },
   {
-    id: 8,
-    name: '行政楼',
-    category: '办公',
-    address: '校园正门北侧',
-    description: '教务处、学生处、财务处等行政部门',
-    icon: GraduationCap,
+    id: 3,
+    name: '学思楼',
+    category: '教学楼',
+    address: '图文大楼东侧',
+    description: '主要教学楼区，各类公共课程在此进行。',
+    icon: BookOpen,
+    color: '#4F46E5',
+    x: 62,
+    y: 45,
+  },
+  {
+    id: 4,
+    name: '博识楼',
+    category: '教学楼',
+    address: '中心广场北侧',
+    description: '教学研讨区域。',
+    icon: Building,
+    color: '#4F46E5',
+    x: 45,
+    y: 36,
+  },
+  {
+    id: 5,
+    name: '博雅楼',
+    category: '教学楼',
+    address: '博识楼东北侧',
+    description: '专业课程教学楼。',
+    icon: Building,
+    color: '#4F46E5',
+    x: 52,
+    y: 30,
+  },
+  {
+    id: 6,
+    name: '博萃楼',
+    category: '教学楼',
+    address: '博雅楼西侧',
+    description: '专业课程教学楼。',
+    icon: Building,
+    color: '#4F46E5',
+    x: 46,
+    y: 26,
+  },
+  {
+    id: 7,
+    name: '行知楼',
+    category: '办公/教学',
+    address: '校园西北区域',
+    description: '行政办公与部分教学活动区域。',
+    icon: Building,
     color: '#0891B2',
-    x: 50,
-    y: 10,
+    x: 36,
+    y: 26,
+  },
+  {
+    id: 8,
+    name: '校史馆',
+    category: '文化',
+    address: '校园西北角',
+    description: '记录学校发展历程，传承上经贸大精神。',
+    icon: Camera,
+    color: '#D97706',
+    x: 40,
+    y: 22,
   },
   {
     id: 9,
-    name: '校园咖啡厅',
-    category: '餐饮',
-    address: '图书馆一楼',
-    description: '提供咖啡、茶饮和轻食',
-    icon: Coffee,
-    color: '#92400E',
-    x: 52,
-    y: 28,
+    name: '乐群楼',
+    category: '办公/活动',
+    address: '校园西侧',
+    description: '师生活动及部分办公区域。',
+    icon: Building,
+    color: '#0891B2',
+    x: 32,
+    y: 32,
   },
   {
     id: 10,
-    name: '校医院',
-    category: '服务',
-    address: '校园西北角',
-    description: '提供基本医疗服务和健康咨询',
+    name: '德政楼',
+    category: '办公',
+    address: '图文大楼西侧',
+    description: '行政与教务办公楼。',
     icon: Building,
-    color: '#DC2626',
-    x: 10,
-    y: 20,
+    color: '#0891B2',
+    x: 30,
+    y: 50,
   },
   {
     id: 11,
-    name: '校园超市',
-    category: '服务',
-    address: '食堂旁',
-    description: '日用品、零食饮料、文具等',
-    icon: ShoppingBag,
-    color: '#059669',
-    x: 25,
-    y: 62,
+    name: '溯源楼',
+    category: '办公/教学',
+    address: '校园西南角',
+    description: '教研与办公区域。',
+    icon: Building,
+    color: '#0891B2',
+    x: 20,
+    y: 60,
   },
   {
     id: 12,
-    name: '校车站',
-    category: '交通',
-    address: '校园正门',
-    description: '往返地铁站和校区的班车',
-    icon: Bus,
-    color: '#4F46E5',
-    x: 50,
-    y: 85,
+    name: '思源餐厅',
+    category: '餐饮',
+    address: '校园西侧',
+    description: '提供多样化的师生餐饮服务。',
+    icon: Utensils,
+    color: '#DC2626',
+    x: 25,
+    y: 35,
   },
+  {
+    id: 13,
+    name: '教育超市',
+    category: '服务',
+    address: '思源餐厅旁',
+    description: '提供各类生活日用品、零食饮料等。',
+    icon: ShoppingBag,
+    color: '#059669',
+    x: 20,
+    y: 40,
+  },
+  {
+    id: 14,
+    name: '学生餐厅',
+    category: '餐饮',
+    address: '校园最西侧',
+    description: '大型学生食堂，提供三餐。',
+    icon: Utensils,
+    color: '#DC2626',
+    x: 15,
+    y: 45,
+  },
+  {
+    id: 15,
+    name: '体育馆',
+    category: '运动',
+    address: '校园东北角',
+    description: '室内篮球场、羽毛球场等综合体育场馆。',
+    icon: Dumbbell,
+    color: '#D97706',
+    x: 75,
+    y: 25,
+  },
+  {
+    id: 16,
+    name: '体育场/操场',
+    category: '运动',
+    address: '校园东侧',
+    description: '标准田径场及足球场。',
+    icon: Dumbbell,
+    color: '#059669',
+    x: 85,
+    y: 38,
+  },
+  {
+    id: 17,
+    name: '思源湖',
+    category: '景观',
+    address: '校园西南侧',
+    description: '校园核心景观湖，风景优美。',
+    icon: Trees,
+    color: '#0284C7',
+    x: 35,
+    y: 68,
+  },
+  {
+    id: 18,
+    name: '正大门',
+    category: '交通',
+    address: '校园东南侧主路',
+    description: '学校主入口。',
+    icon: MapPin,
+    color: '#1E293B',
+    x: 65,
+    y: 75,
+  }
 ]
 
 function CampusMap() {
@@ -182,7 +246,7 @@ function CampusMap() {
       {/* 页面标题 */}
       <div className="page-header">
         <h1 className="page-title">校园导航</h1>
-        <p className="page-desc">快速找到校园内的各个地点</p>
+        <p className="page-desc">上经贸大 (SUIBE) 校园平面导览</p>
       </div>
 
       {/* 搜索框 */}
@@ -201,7 +265,7 @@ function CampusMap() {
           <input
             type="text"
             className="map-search-input"
-            placeholder="搜索教学楼、食堂、图书馆..."
+            placeholder="搜索教学楼、食堂、地标..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             style={{ paddingLeft: '38px' }}
@@ -212,28 +276,24 @@ function CampusMap() {
       {/* SVG校园地图 */}
       <div className="map-canvas">
         <svg className="map-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {/* 背景 */}
+          {/* 背景色 (浅绿色草地) */}
           <rect width="100" height="100" fill="#F0FDF4" />
 
-          {/* 校园道路 */}
-          <line x1="50" y1="0" x2="50" y2="100" stroke="#D1D5DB" strokeWidth="1.5" strokeDasharray="3,3" />
-          <line x1="0" y1="45" x2="100" y2="45" stroke="#D1D5DB" strokeWidth="1.5" strokeDasharray="3,3" />
-          <line x1="0" y1="70" x2="100" y2="70" stroke="#D1D5DB" strokeWidth="1.5" strokeDasharray="3,3" />
+          {/* 模拟地图上的水系 (河流与思源湖) */}
+          <path d="M 0 80 Q 50 60 100 85 L 100 100 L 0 100 Z" fill="#E0F2FE" />
+          <path d="M 50 100 L 100 60 L 100 45 L 60 75 Z" fill="#E0F2FE" />
+          <ellipse cx="32" cy="72" rx="14" ry="10" fill="#BAE6FD" />
+          <ellipse cx="85" cy="55" rx="10" ry="15" fill="#E0F2FE" />
 
-          {/* 绿化区域 */}
-          <ellipse cx="50" cy="38" rx="8" ry="5" fill="#BBF7D0" opacity="0.6" />
-          <ellipse cx="30" cy="75" rx="6" ry="4" fill="#BBF7D0" opacity="0.6" />
-          <ellipse cx="75" cy="45" rx="5" ry="3" fill="#BBF7D0" opacity="0.6" />
+          {/* 校园主干道线稿模拟 */}
+          <path d="M 10 40 L 40 50 L 60 40 L 80 50" stroke="#D1D5DB" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path d="M 40 50 L 50 80 L 70 100" stroke="#D1D5DB" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path d="M 25 35 L 45 35 L 50 20" stroke="#D1D5DB" strokeWidth="1.5" fill="none" strokeLinecap="round" />
 
-          {/* 建筑物底色 */}
-          <rect x="30" y="25" width="12" height="8" rx="1" fill="#E0E7FF" stroke="#4F46E5" strokeWidth="0.3" />
-          <rect x="55" y="20" width="12" height="8" rx="1" fill="#E0E7FF" stroke="#4F46E5" strokeWidth="0.3" />
-          <rect x="43" y="15" width="12" height="10" rx="1" fill="#EDE9FE" stroke="#7C3AED" strokeWidth="0.3" />
-          <rect x="15" y="50" width="12" height="8" rx="1" fill="#FEE2E2" stroke="#DC2626" strokeWidth="0.3" />
-          <rect x="40" y="45" width="12" height="8" rx="1" fill="#FEE2E2" stroke="#DC2626" strokeWidth="0.3" />
-          <rect x="10" y="35" width="10" height="8" rx="1" fill="#D1FAE5" stroke="#059669" strokeWidth="0.3" />
-          <rect x="65" y="55" width="12" height="8" rx="1" fill="#FEF3C7" stroke="#D97706" strokeWidth="0.3" />
-          <rect x="45" y="5" width="12" height="8" rx="1" fill="#CFFAFE" stroke="#0891B2" strokeWidth="0.3" />
+          {/* 绿化与操场色块示意 */}
+          <rect x="75" y="32" width="18" height="12" rx="4" fill="#A7F3D0" />
+          <ellipse cx="20" cy="20" rx="6" ry="4" fill="#BBF7D0" opacity="0.6" />
+          <ellipse cx="60" cy="20" rx="8" ry="5" fill="#BBF7D0" opacity="0.6" />
 
           {/* POI标记点 */}
           {filteredPois.map((poi) => (
@@ -269,34 +329,29 @@ function CampusMap() {
                   />
                 </circle>
               )}
-              {/* 标记点 */}
+              {/* 标记点心 */}
               <circle
                 cx={poi.x}
                 cy={poi.y}
-                r="2.5"
+                r="2"
                 fill={poi.color}
                 stroke="white"
                 strokeWidth="0.8"
               />
-              {/* 标签 */}
+              {/* 标签文本 */}
               <text
                 x={poi.x}
-                y={poi.y - 4}
+                y={poi.y - 3.5}
                 textAnchor="middle"
-                fontSize="2.5"
-                fontWeight="600"
+                fontSize="2.2"
+                fontWeight="700"
                 fill="#1E293B"
+                style={{ textShadow: '0px 1px 2px rgba(255,255,255,0.8)' }}
               >
                 {poi.name}
               </text>
             </g>
           ))}
-
-          {/* 校门标记 */}
-          <rect x="45" y="90" width="10" height="4" rx="1" fill="#4F46E5" opacity="0.3" />
-          <text x="50" y="98" textAnchor="middle" fontSize="2.5" fill="#4F46E5" fontWeight="600">
-            校门
-          </text>
         </svg>
       </div>
 
