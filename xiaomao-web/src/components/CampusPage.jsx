@@ -42,14 +42,15 @@ const services = [
     color: '#D97706',
     bgColor: '#FEF3C7',
   },
-  {
-    path: '/campus/library',
-    title: '图书馆',
-    desc: '查看当前借阅情况、搜索图书、获取推荐书目',
-    icon: BookOpen,
-    color: '#7C3AED',
-    bgColor: '#EDE9FE',
-  },
+  // 图书馆入口暂时隐藏
+  // {
+  //   path: '/campus/library',
+  //   title: '图书馆',
+  //   desc: '查看当前借阅情况、搜索图书、获取推荐书目',
+  //   icon: BookOpen,
+  //   color: '#7C3AED',
+  //   bgColor: '#EDE9FE',
+  // },
   {
     path: '/campus/news',
     title: '校园资讯',

@@ -1,11 +1,11 @@
 /* ========================================
    小贸 - 课表查询页面
-   周选择器 + 课程表格 + 当前时间高亮
+   周选择器 + 课程表格 + 当前时间高亮 + 课程随记
    数据来源：用户页面登录教务系统后自动缓存
    ======================================== */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, MapPin, User, Calendar } from 'lucide-react'
+import { Clock, MapPin, User, Calendar, X, Save, FileText, Loader, BookOpen } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
 /* 星期配置 */
@@ -127,6 +127,230 @@ function transformRealSchedule(realData) {
   return result
 }
 
+/* 课程随记弹窗组件 */
+function CourseNoteModal({ course, token, onClose }) {
+  const [noteContent, setNoteContent] = useState('')
+  const [originalContent, setOriginalContent] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('') // 'saved' | 'error' | ''
+
+  /* 加载已有随记 */
+  useEffect(() => {
+    const loadNote = async () => {
+      if (!token || !course?.name) return
+      setIsLoading(true)
+      try {
+        const res = await fetch(`/api/user/course-notes/${encodeURIComponent(course.name)}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            setNoteContent(data.data.content || '')
+            setOriginalContent(data.data.content || '')
+          }
+        }
+      } catch (err) {
+        console.warn('加载课程随记失败:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadNote()
+  }, [token, course?.name])
+
+  /* 保存随记 */
+  const handleSave = async () => {
+    if (!token || !course?.name) return
+    setIsSaving(true)
+    setSaveStatus('')
+    try {
+      const res = await fetch('/api/user/course-notes', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          courseName: course.name,
+          courseCode: course.code || '',
+          content: noteContent,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setOriginalContent(noteContent)
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus(''), 2000)
+      } else {
+        setSaveStatus('error')
+      }
+    } catch (err) {
+      console.error('保存课程随记失败:', err)
+      setSaveStatus('error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  /* 是否有修改 */
+  const hasChanges = noteContent !== originalContent
+
+  const colorConfig = courseColors[course.color % courseColors.length]
+
+  return (
+    <div
+      className="news-modal-overlay"
+      onClick={onClose}
+    >
+      <div
+        className="news-modal"
+        style={{ position: 'relative', maxWidth: '480px', width: '90%' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 关闭按钮 */}
+        <button className="news-modal-close" onClick={onClose}>
+          <X size={18} />
+        </button>
+
+        {/* 课程信息头部 */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '16px',
+        }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '12px',
+            background: colorConfig.bg,
+            color: colorConfig.text,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <BookOpen size={20} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="news-modal-title" style={{ marginBottom: '2px', fontSize: '16px' }}>
+              {course.name}
+            </h2>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {course.teacher && <span>{course.teacher}</span>}
+              {course.room && <span>· {course.room}</span>}
+              {course.time && <span>· {course.time}</span>}
+              {course.weeks && <span>· {course.weeks}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* 随记标题 */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          marginBottom: '10px',
+          fontSize: '14px',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+        }}>
+          <FileText size={15} style={{ color: 'var(--primary)' }} />
+          课程随记
+          <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-muted)' }}>
+            （记录考核方式、重要内容等）
+          </span>
+        </div>
+
+        {/* 随记输入区 */}
+        {isLoading ? (
+          <div style={{
+            height: '160px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Loader size={18} style={{ color: 'var(--text-muted)', animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : (
+          <textarea
+            value={noteContent}
+            onChange={(e) => setNoteContent(e.target.value)}
+            placeholder="在这里记录课程的重要信息，例如：&#10;- 考核方式：平时30% + 期末70%&#10;- 作业要求：每周一篇论文&#10;- 考试时间：第16周&#10;- 其他注意事项..."
+            style={{
+              width: '100%',
+              minHeight: '180px',
+              padding: '14px 16px',
+              border: '1px solid var(--card-border)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg)',
+              color: 'var(--text-primary)',
+              fontSize: '14px',
+              lineHeight: '1.7',
+              resize: 'vertical',
+              outline: 'none',
+              fontFamily: 'inherit',
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={(e) => { e.target.style.borderColor = 'var(--primary)' }}
+            onBlur={(e) => { e.target.style.borderColor = 'var(--card-border)' }}
+          />
+        )}
+
+        {/* 底部操作栏 */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '12px',
+        }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {noteContent.length > 0 && `${noteContent.length} 字`}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {saveStatus === 'saved' && (
+              <span style={{ fontSize: '12px', color: 'var(--success)' }}>已保存</span>
+            )}
+            {saveStatus === 'error' && (
+              <span style={{ fontSize: '12px', color: 'var(--error)' }}>保存失败</span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !hasChanges}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 18px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: hasChanges ? 'var(--primary)' : 'var(--text-muted)',
+                color: '#fff',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: hasChanges ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s',
+                opacity: isSaving ? 0.7 : 1,
+              }}
+            >
+              {isSaving ? (
+                <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <Save size={14} />
+              )}
+              {isSaving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SchedulePage() {
   const navigate = useNavigate()
   const today = new Date().getDay()
@@ -140,9 +364,13 @@ function SchedulePage() {
   const [realSchedule, setRealSchedule] = useState(null)
   const [dataSource, setDataSource] = useState('mock')
 
-  /* 组件挂载时，从profile获取缓存的课表数据 */
+  /* 课程随记相关状态 */
+  const [selectedCourse, setSelectedCourse] = useState(null) // 当前选中要编辑随记的课程
+  const [courseNotes, setCourseNotes] = useState({}) // { courseName: true } 标记哪些课程有随记
+
+  /* 组件挂载时，从profile获取缓存的课表数据 + 加载随记标记 */
   useEffect(() => {
-    const loadCachedSchedule = async () => {
+    const loadData = async () => {
       if (!token) return
       try {
         const res = await fetch('/api/user/profile', {
@@ -164,8 +392,29 @@ function SchedulePage() {
       } catch (err) {
         console.warn('加载缓存课表失败:', err)
       }
+
+      /* 加载随记标记（哪些课程有随记） */
+      try {
+        const notesRes = await fetch('/api/user/course-notes', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (notesRes.ok) {
+          const notesData = await notesRes.json()
+          if (notesData.success && Array.isArray(notesData.data)) {
+            const noteMap = {}
+            notesData.data.forEach((note) => {
+              if (note.content && note.content.trim()) {
+                noteMap[note.course_name] = true
+              }
+            })
+            setCourseNotes(noteMap)
+          }
+        }
+      } catch (err) {
+        console.warn('加载课程随记标记失败:', err)
+      }
     }
-    loadCachedSchedule()
+    loadData()
   }, [token])
 
   /* 获取当前时间段（用于高亮，基于14个节次） */
@@ -234,13 +483,46 @@ function SchedulePage() {
     return todayIndex === day && currentTimeSlot === slot
   }
 
+  /* 点击课程打开随记弹窗 */
+  const handleCourseClick = useCallback((course) => {
+    if (!token) {
+      navigate('/user')
+      return
+    }
+    setSelectedCourse(course)
+  }, [token, navigate])
+
+  /* 随记弹窗关闭后刷新标记 */
+  const handleNoteModalClose = useCallback(async () => {
+    setSelectedCourse(null)
+    try {
+      const notesRes = await fetch('/api/user/course-notes', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (notesRes.ok) {
+        const notesData = await notesRes.json()
+        if (notesData.success && Array.isArray(notesData.data)) {
+          const noteMap = {}
+          notesData.data.forEach((note) => {
+            if (note.content && note.content.trim()) {
+              noteMap[note.course_name] = true
+            }
+          })
+          setCourseNotes(noteMap)
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [token])
+
   return (
     <div className="schedule-container">
       {/* 页面标题 */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">课表查询</h1>
-          <p className="page-desc">查看本周课程安排</p>
+          <p className="page-desc">点击课程可添加随记</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {dataSource === 'cached' && (
@@ -308,9 +590,11 @@ function SchedulePage() {
               .map((course) => {
                 const colorConfig = courseColors[course.color % courseColors.length]
                 const isCurrent = isCurrentSlot(selectedDay, course.slot)
+                const hasNote = courseNotes[course.name]
                 return (
                   <div
                     key={course.name + course.time}
+                    onClick={() => handleCourseClick(course)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -320,6 +604,14 @@ function SchedulePage() {
                       border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--card-border)'}`,
                       borderRadius: 'var(--radius-md)',
                       boxShadow: isCurrent ? '0 0 0 2px rgba(79,70,229,0.1)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'box-shadow 0.15s, border-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--primary)'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--card-border)'
                     }}
                   >
                     <div
@@ -331,22 +623,27 @@ function SchedulePage() {
                         flexShrink: 0,
                       }}
                     />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-                        {course.name}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {course.name}
+                        </span>
                         {isCurrent && (
                           <span
                             style={{
-                              marginLeft: '8px',
                               fontSize: '11px',
                               padding: '1px 6px',
                               background: '#EEF2FF',
                               color: '#4F46E5',
                               borderRadius: 'var(--radius-full)',
+                              flexShrink: 0,
                             }}
                           >
                             进行中
                           </span>
+                        )}
+                        {hasNote && (
+                          <FileText size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                         )}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -354,7 +651,7 @@ function SchedulePage() {
                         {course.weeks && ` · ${course.weeks}`}
                       </div>
                     </div>
-                    <Clock size={16} style={{ color: 'var(--text-muted)' }} />
+                    <Clock size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   </div>
                 )
               })}
@@ -426,6 +723,7 @@ function SchedulePage() {
                     {course ? (
                       <div
                         className={`course-card ${isCurrent ? 'current' : ''}`}
+                        onClick={() => handleCourseClick(course)}
                         style={{
                           background: colorConfig.bg,
                           color: colorConfig.text,
@@ -434,9 +732,26 @@ function SchedulePage() {
                           display: 'flex',
                           flexDirection: 'column',
                           justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'transform 0.15s, box-shadow 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.02)'
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'
+                          e.currentTarget.style.zIndex = '2'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'none'
+                          e.currentTarget.style.boxShadow = 'none'
+                          e.currentTarget.style.zIndex = '1'
                         }}
                       >
-                        <div className="course-name">{course.name}</div>
+                        <div className="course-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {course.name}
+                          {courseNotes[course.name] && (
+                            <FileText size={11} style={{ flexShrink: 0 }} />
+                          )}
+                        </div>
                         <div className="course-info">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                             <MapPin size={10} />
@@ -457,6 +772,15 @@ function SchedulePage() {
         </div>
       </div>
       </>)}
+
+      {/* 课程随记弹窗 */}
+      {selectedCourse && (
+        <CourseNoteModal
+          course={selectedCourse}
+          token={token}
+          onClose={handleNoteModalClose}
+        />
+      )}
     </div>
   )
 }

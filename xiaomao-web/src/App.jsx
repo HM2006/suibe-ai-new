@@ -38,8 +38,8 @@ function App() {
         {/* 成绩查询 */}
         <Route path="/campus/grades" element={<Layout><GradesPage /></Layout>} />
 
-        {/* 图书馆 */}
-        <Route path="/campus/library" element={<Layout><LibraryPage /></Layout>} />
+        {/* 图书馆 - 暂时隐藏 */}
+        {/* <Route path="/campus/library" element={<Layout><LibraryPage /></Layout>} /> */}
 
         {/* 校园资讯 */}
         <Route path="/campus/news" element={<Layout><NewsPage /></Layout>} />

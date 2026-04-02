@@ -311,4 +311,80 @@ router.post('/user/change-password', authMiddleware, (req, res) => {
   });
 });
 
+// ==================== 课程随记 ====================
+
+/**
+ * GET /api/user/course-notes - 获取当前用户的所有课程随记（需认证）
+ */
+router.get('/user/course-notes', authMiddleware, (req, res) => {
+  const userId = req.user.userId;
+  const notes = db.getCourseNotes(userId);
+  res.json({
+    success: true,
+    data: notes,
+  });
+});
+
+/**
+ * GET /api/user/course-notes/:courseName - 获取某门课程的随记（需认证）
+ */
+router.get('/user/course-notes/:courseName', authMiddleware, (req, res) => {
+  const userId = req.user.userId;
+  const courseName = decodeURIComponent(req.params.courseName);
+  const note = db.getCourseNoteByName(userId, courseName);
+  res.json({
+    success: true,
+    data: note || null,
+  });
+});
+
+/**
+ * PUT /api/user/course-notes - 保存或更新课程随记（需认证）
+ * body: { courseName, courseCode?, content }
+ */
+router.put('/user/course-notes', authMiddleware, (req, res) => {
+  const userId = req.user.userId;
+  const { courseName, courseCode, content } = req.body;
+
+  if (!courseName) {
+    return res.status(400).json({
+      success: false,
+      message: '课程名称不能为空',
+    });
+  }
+
+  const note = db.saveCourseNote(userId, courseName, courseCode || '', content || '');
+  res.json({
+    success: true,
+    data: note,
+  });
+});
+
+/**
+ * DELETE /api/user/course-notes/:noteId - 删除课程随记（需认证）
+ */
+router.delete('/user/course-notes/:noteId', authMiddleware, (req, res) => {
+  const userId = req.user.userId;
+  const noteId = parseInt(req.params.noteId, 10);
+  if (isNaN(noteId)) {
+    return res.status(400).json({
+      success: false,
+      message: '随记ID无效',
+    });
+  }
+  // 验证随记属于当前用户
+  const note = db.getCourseNoteById(noteId);
+  if (!note || note.user_id !== userId) {
+    return res.status(404).json({
+      success: false,
+      message: '随记不存在',
+    });
+  }
+  const deleted = db.deleteCourseNote(noteId);
+  res.json({
+    success: true,
+    deleted,
+  });
+});
+
 module.exports = router;

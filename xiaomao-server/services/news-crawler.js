@@ -445,6 +445,7 @@ async function fetchNewsDetail(url) {
       date: '',
       author: '微信公众号',
       url: url,
+      attachments: [],
     };
   }
 
@@ -476,6 +477,23 @@ async function fetchNewsDetail(url) {
       content = $content.text().trim();
     }
 
+    // 提取附件列表
+    let attachments = [];
+    const $attachments = $('.wp_articlecontent a[href*="upload"], .Article_Content a[href*="upload"], .Article_Content a[href*="attach"], .art_content a[href*="upload"], .wp_articlecontent .attachment, .Article_Content .attachment');
+    if ($attachments.length > 0) {
+      $attachments.each((index, el) => {
+        const $el = $(el);
+        const href = $el.attr('href') || '';
+        const text = $el.text().trim() || '附件';
+        if (href) {
+          attachments.push({
+            name: text,
+            url: href.startsWith('http') ? href : (url.startsWith('http') ? new URL(href, url).href : href),
+          });
+        }
+      });
+    }
+
     // 提取日期
     const date = $('.Article_PublishDate, .art_date, .news_date, .post-date').first().text().trim();
 
@@ -488,6 +506,7 @@ async function fetchNewsDetail(url) {
       date: date || '',
       author: author || '',
       url: url,
+      attachments: attachments,
     };
   } catch (error) {
     console.error(`[NewsCrawler] 抓取新闻详情失败: ${error.message}`);

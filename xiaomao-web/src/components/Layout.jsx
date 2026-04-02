@@ -22,7 +22,7 @@ const navItems = [
   { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
-  { path: '/campus/library', label: '图书馆', icon: BookOpen },
+  // { path: '/campus/library', label: '图书馆', icon: BookOpen }, // 暂时隐藏
   { path: '/campus/news', label: '资讯', icon: Newspaper },
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]

@@ -396,8 +396,47 @@ function NewsPage() {
                     </p>
                   ))}
 
-                  {/* 附件提示 */}
-                  {selectedNews.hasAttachment && (
+                  {/* 附件列表 */}
+                  {(newsDetail?.attachments && newsDetail.attachments.length > 0) && (
+                    <div style={{ marginTop: '20px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text-primary)' }}>
+                        附件下载
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {newsDetail.attachments.map((att, idx) => (
+                          <a
+                            key={idx}
+                            href={att.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '10px 14px',
+                              background: 'var(--bg-secondary)',
+                              borderRadius: 'var(--radius-sm)',
+                              fontSize: '13px',
+                              color: 'var(--primary)',
+                              textDecoration: 'none',
+                              fontWeight: 500,
+                              transition: 'background 0.15s',
+                            }}
+                          >
+                            <Paperclip size={14} />
+                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {att.name}
+                            </span>
+                            <ExternalLink size={12} style={{ flexShrink: 0 }} />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 无附件但有附件标记时的提示 */}
+                  {selectedNews.hasAttachment && (!newsDetail?.attachments || newsDetail.attachments.length === 0) && (
                     <div style={{
                       marginTop: '20px',
                       padding: '12px 16px',
@@ -410,11 +449,11 @@ function NewsPage() {
                       color: 'var(--text-muted)',
                     }}>
                       <Paperclip size={16} />
-                      <span>本文含附件，如需下载请前往教务处官网查看</span>
+                      <span>本文含附件，如需下载请前往原文查看</span>
                     </div>
                   )}
 
-                  {/* 跳转原文链接 */}
+                  {/* 原文链接（作为补充，非必须） */}
                   {selectedNews.url && (
                     <div style={{
                       marginTop: '16px',
@@ -432,14 +471,13 @@ function NewsPage() {
                           alignItems: 'center',
                           gap: '4px',
                           fontSize: '13px',
-                          color: 'var(--primary)',
+                          color: 'var(--text-muted)',
                           textDecoration: 'none',
-                          fontWeight: 500,
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink size={14} />
-                        前往原文查看
+                        查看原文
                       </a>
                     </div>
                   )}

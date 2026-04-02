@@ -441,7 +441,9 @@ class EduProxy {
 
     /* 提取教师（取第一个教师名，教室后面的第一个名字） */
     const teacherMatch = text.match(/(?:松江|长宁|浦东)\s+\S+\s+(\S+)/);
-    const teacher = teacherMatch ? teacherMatch[1] : '';
+    let teacher = teacherMatch ? teacherMatch[1] : '';
+    /* 清理教师名中可能混入的"人数:xx/xx"后缀 */
+    teacher = teacher.replace(/人数[:：]?\d+\/\d+.*$/, '').trim();
 
     /* 提取人数 */
     const enrollmentMatch = text.match(/人数[:：]?(\d+)\/(\d+)/);
