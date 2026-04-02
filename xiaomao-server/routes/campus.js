@@ -245,10 +245,19 @@ router.get('/campus/news', asyncHandler(async (req, res) => {
     let newsList = newsCrawler.getCachedNews();
 
     if (newsList.length === 0) {
-      // 爬虫无缓存，主动抓取一次
+      // 爬虫无缓存，主动抓取一次（学校要闻+教务处通知）
       console.log('[Campus/News] 缓存为空，主动抓取新闻...');
-      newsList = await newsCrawler.fetchNewsList(1);
-      newsCrawler.updateCache(newsList);
+      try {
+        const [schoolNews, jwcNews] = await Promise.allSettled([
+          newsCrawler.fetchNewsList(1),
+          newsCrawler.fetchJwcNoticeList(1),
+        ]);
+        if (schoolNews.status === 'fulfilled') newsCrawler.updateCache(schoolNews.value);
+        if (jwcNews.status === 'fulfilled') newsCrawler.updateCache(jwcNews.value);
+        newsList = newsCrawler.getCachedNews();
+      } catch (err) {
+        console.error('[Campus/News] 主动抓取失败:', err.message);
+      }
     }
 
     // 按分类筛选
