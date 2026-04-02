@@ -13,6 +13,7 @@ import {
   Sparkles,
   User as UserIcon,
   Award,
+  FileText,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
   // { path: '/campus/library', label: '图书馆', icon: BookOpen }, // 暂时隐藏
   { path: '/campus/news', label: '资讯', icon: Newspaper },
+  { path: '/notes', label: '随记', icon: FileText },
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
@@ -37,6 +39,7 @@ function getPageTitle(pathname) {
     '/campus/grades': { title: '成绩查询', subtitle: '查看各科成绩' },
     '/campus/library': { title: '图书馆', subtitle: '借阅与图书管理' },
     '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
+    '/notes': { title: '随记', subtitle: '记录课程要点' },
     '/scholarship': { title: '奖学金计算器', subtitle: '综合测评分数计算' },
   }
   return titleMap[pathname] || { title: '小贸', subtitle: '校园AI助手' }
@@ -57,7 +60,7 @@ function Layout({ children }) {
             <Sparkles size={22} />
           </div>
           <div>
-            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.2.2</span></div>
+            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.3.0</span></div>
             <div className="sidebar-subtitle">校园AI助手</div>
           </div>
         </div>

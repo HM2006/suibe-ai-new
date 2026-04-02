@@ -22,6 +22,7 @@ const campusRoutes = require('./routes/campus');
 const eduRoutes = require('./routes/edu');
 const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
+const notesRoutes = require('./routes/notes');
 
 // 导入错误处理中间件
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
@@ -116,6 +117,9 @@ app.use('/api', eduRoutes);
 // 用户系统路由
 app.use('/api', userRoutes);
 app.use('/api', adminRoutes);
+
+// 随记路由
+app.use('/api', notesRoutes);
 
 // ==================== SPA 路由回退 ====================
 // 所有非 API 的 GET 请求都返回 index.html，让 React Router 处理前端路由

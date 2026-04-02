@@ -103,18 +103,32 @@ function init() {
     );
   `);
 
-  // 创建课程随记表
+  // 创建随记表（备忘录式，支持多文件）
   db.exec(`
-    CREATE TABLE IF NOT EXISTS course_notes (
+    CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
-      course_name TEXT NOT NULL,
-      course_code TEXT DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      course_name TEXT DEFAULT '',
       content TEXT NOT NULL DEFAULT '',
+      ai_summary TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-      UNIQUE(user_id, course_name),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  // 创建随记附件表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS note_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      mimetype TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size INTEGER NOT NULL DEFAULT 0,
+      data TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
   `);
 
@@ -346,79 +360,129 @@ function deleteUser(userId) {
   return result.changes > 0;
 }
 
-// ==================== 课程随记 ====================
+// ==================== 随记 ====================
 
 /**
- * 获取用户的所有课程随记
+ * 获取用户的所有随记（不含附件数据，附件按需加载）
  * @param {number} userId
- * @returns {Array} 随记列表
+ * @returns {Array}
  */
-function getCourseNotes(userId) {
+function getNotes(userId) {
   const stmt = db.prepare(
-    'SELECT * FROM course_notes WHERE user_id = ? ORDER BY updated_at DESC'
+    'SELECT n.*, (SELECT COUNT(*) FROM note_attachments WHERE note_id = n.id) as attachment_count FROM notes n WHERE n.user_id = ? ORDER BY n.updated_at DESC'
   );
   return stmt.all(userId);
 }
 
 /**
- * 获取用户某门课程的随记
- * @param {number} userId
- * @param {string} courseName - 课程名称
- * @returns {Object|null} 随记对象
+ * 按ID获取随记（含附件列表，不含附件data）
+ * @param {number} noteId
+ * @returns {Object|null}
  */
-function getCourseNoteByName(userId, courseName) {
+function getNoteById(noteId) {
+  const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(noteId);
+  if (!note) return null;
+  const attachments = db.prepare(
+    'SELECT id, filename, mimetype, size, created_at FROM note_attachments WHERE note_id = ? ORDER BY id ASC'
+  ).all(noteId);
+  return { ...note, attachments };
+}
+
+/**
+ * 创建随记
+ */
+function createNote(userId, { title, course_name, content }) {
   const stmt = db.prepare(
-    'SELECT * FROM course_notes WHERE user_id = ? AND course_name = ?'
+    "INSERT INTO notes (user_id, title, course_name, content) VALUES (?, ?, ?, ?)"
   );
-  return stmt.get(userId, courseName) || null;
+  const result = stmt.run(userId, title || '', course_name || '', content || '');
+  return getNoteById(result.lastInsertRowid);
 }
 
 /**
- * 按ID获取课程随记
- * @param {number} noteId
- * @returns {Object|null} 随记对象
+ * 更新随记
  */
-function getCourseNoteById(noteId) {
-  const stmt = db.prepare('SELECT * FROM course_notes WHERE id = ?');
-  return stmt.get(noteId) || null;
+function updateNote(noteId, { title, course_name, content, ai_summary }) {
+  const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(noteId);
+  if (!note) return null;
+  const stmt = db.prepare(
+    "UPDATE notes SET title = ?, course_name = ?, content = ?, ai_summary = ?, updated_at = datetime('now', 'localtime') WHERE id = ?"
+  );
+  stmt.run(
+    title !== undefined ? title : note.title,
+    course_name !== undefined ? course_name : note.course_name,
+    content !== undefined ? content : note.content,
+    ai_summary !== undefined ? ai_summary : note.ai_summary,
+    noteId
+  );
+  return getNoteById(noteId);
 }
 
 /**
- * 保存或更新课程随记（按课程名唯一）
- * @param {number} userId
- * @param {string} courseName - 课程名称
- * @param {string} courseCode - 课程代码（可选）
- * @param {string} content - 随记内容
- * @returns {Object} 保存后的随记
+ * 删除随记（级联删除附件）
  */
-function saveCourseNote(userId, courseName, courseCode, content) {
-  const existing = getCourseNoteByName(userId, courseName);
-  if (existing) {
-    // 更新已有随记
-    const stmt = db.prepare(
-      "UPDATE course_notes SET content = ?, course_code = ?, updated_at = datetime('now', 'localtime') WHERE id = ?"
-    );
-    stmt.run(content, courseCode || '', existing.id);
-    return getCourseNoteByName(userId, courseName);
-  } else {
-    // 新建随记
-    const stmt = db.prepare(
-      "INSERT INTO course_notes (user_id, course_name, course_code, content) VALUES (?, ?, ?, ?)"
-    );
-    const result = stmt.run(userId, courseName, courseCode || '', content);
-    return getCourseNoteByName(userId, courseName);
-  }
-}
-
-/**
- * 删除课程随记
- * @param {number} noteId
- * @returns {boolean} 是否删除成功
- */
-function deleteCourseNote(noteId) {
-  const stmt = db.prepare('DELETE FROM course_notes WHERE id = ?');
-  const result = stmt.run(noteId);
+function deleteNote(noteId) {
+  db.prepare('DELETE FROM note_attachments WHERE note_id = ?').run(noteId);
+  const result = db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
   return result.changes > 0;
+}
+
+/**
+ * 添加附件（base64数据存入数据库）
+ */
+function addAttachment(noteId, { filename, mimetype, size, data }) {
+  const stmt = db.prepare(
+    "INSERT INTO note_attachments (note_id, filename, mimetype, size, data) VALUES (?, ?, ?, ?, ?)"
+  );
+  const result = stmt.run(noteId, filename, mimetype, size, data);
+  return result.lastInsertRowid;
+}
+
+/**
+ * 获取附件完整数据（含base64）
+ */
+function getAttachmentById(attachmentId) {
+  return db.prepare('SELECT * FROM note_attachments WHERE id = ?').get(attachmentId) || null;
+}
+
+/**
+ * 获取随记的所有附件（含base64数据，用于AI处理）
+ */
+function getNoteAttachmentsWithData(noteId) {
+  return db.prepare('SELECT * FROM note_attachments WHERE note_id = ?').all(noteId);
+}
+
+/**
+ * 删除附件
+ */
+function deleteAttachment(attachmentId) {
+  const result = db.prepare('DELETE FROM note_attachments WHERE id = ?').run(attachmentId);
+  return result.changes > 0;
+}
+
+/**
+ * 获取用户的所有课程名（从课表缓存中提取，用于随记下拉选择）
+ * @param {number} userId
+ * @returns {Array<string>}
+ */
+function getUserCourseNames(userId) {
+  const cache = getScheduleCache(userId);
+  if (!cache || !cache.data) return [];
+  const courses = cache.data.courses || cache.data;
+  const nameSet = new Set();
+  const extract = (arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach(item => {
+      if (item.name) nameSet.add(item.name);
+      if (Array.isArray(item)) extract(item);
+    });
+  };
+  if (Array.isArray(courses)) {
+    extract(courses);
+  } else if (typeof courses === 'object') {
+    Object.values(courses).forEach(arr => extract(arr));
+  }
+  return Array.from(nameSet);
 }
 
 module.exports = {
@@ -438,9 +502,15 @@ module.exports = {
   updateUserAvatar,
   updateUserPassword,
   deleteUser,
-  getCourseNotes,
-  getCourseNoteByName,
-  getCourseNoteById,
-  saveCourseNote,
-  deleteCourseNote,
+  // 随记
+  getNotes,
+  getNoteById,
+  createNote,
+  updateNote,
+  deleteNote,
+  addAttachment,
+  getAttachmentById,
+  getNoteAttachmentsWithData,
+  deleteAttachment,
+  getUserCourseNames,
 };

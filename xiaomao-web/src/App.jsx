@@ -15,6 +15,7 @@ import NewsPage from './components/NewsPage'
 import UserPage from './components/UserPage'
 import AdminPage from './components/AdminPage'
 import ScholarshipPage from './components/ScholarshipPage'
+import NotesPage from './components/NotesPage'
 
 function App() {
   return (
@@ -52,6 +53,9 @@ function App() {
 
         {/* 奖学金计算器 */}
         <Route path="/scholarship" element={<Layout><ScholarshipPage /></Layout>} />
+
+        {/* 随记 */}
+        <Route path="/notes" element={<Layout><NotesPage /></Layout>} />
       </Routes>
     </UserProvider>
   )
