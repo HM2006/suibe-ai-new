@@ -1359,6 +1359,11 @@ select {
   font-weight: 600;
 }
 
+.news-tag.news {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
 .news-tag.notice {
   background: #DBEAFE;
   color: #1E40AF;

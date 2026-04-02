@@ -13,6 +13,7 @@ import {
   User,
   RefreshCw,
   ExternalLink,
+  Paperclip,
 } from 'lucide-react'
 
 const NEWS_API = '/api/campus/news'
@@ -20,21 +21,22 @@ const NEWS_API = '/api/campus/news'
 /* 新闻分类配置 */
 const categories = [
   { key: 'all', label: '全部' },
+  { key: 'news', label: '学校要闻' },
   { key: 'notice', label: '通知公告' },
   { key: 'activity', label: '校园活动' },
-  { key: 'academic', label: '学术动态' },
 ]
 
 /* 分类标签样式 */
 const tagStyles = {
+  news: { className: 'news', label: '要闻' },
   notice: { className: 'notice', label: '通知' },
   activity: { className: 'activity', label: '活动' },
-  academic: { className: 'academic', label: '学术' },
 }
 
-/* 实时新闻分类映射 */
+/* 实时新闻分类映射：后端category -> 前端category */
 const liveCategoryMap = {
-  '学校要闻': 'notice',
+  '学校要闻': 'news',
+  '教务通知': 'notice',
 }
 
 /* 模拟新闻数据 - 作为fallback保留 */
@@ -121,13 +123,14 @@ function NewsPage() {
         const transformed = data.data.news.map((item) => ({
           id: item.id,
           title: item.title,
-          category: liveCategoryMap[item.category] || 'notice',
+          category: liveCategoryMap[item.category] || 'news',
           date: item.date,
           author: item.category || '学校要闻',
           summary: item.summary || '',
           content: item.summary || '',
           url: item.url,
-          imageUrl: item.imageUrl,
+          imageUrl: item.imageUrl || '',
+          hasAttachment: item.hasAttachment || false,
         }))
         setNewsList(transformed)
         setDataSource('live')
@@ -167,11 +170,7 @@ function NewsPage() {
 
   /* 获取分类标签 */
   const getTag = (news) => {
-    /* 实时新闻使用 category 字段作为标签 */
-    if (dataSource === 'live' && news.author) {
-      return { className: 'notice', label: news.author }
-    }
-    return tagStyles[news.category] || { className: 'notice', label: '通知' }
+    return tagStyles[news.category] || { className: 'news', label: '要闻' }
   }
 
   return (
@@ -272,31 +271,36 @@ function NewsPage() {
                     </div>
                   </div>
                 ) : (
-                  /* 无图片的新闻卡片（原样式） */
+                  /* 无图片的新闻卡片 */
                   <>
-                    {/* 头部：标签 + 日期 */}
                     <div className="news-card-header">
                       <span className={`news-tag ${tag.className}`}>{tag.label}</span>
                       <span className="news-date">{news.date}</span>
                     </div>
-                    {/* 标题 */}
                     <h3 className="news-card-title">{news.title}</h3>
-                    {/* 摘要 */}
-                    <p className="news-card-summary">{news.summary}</p>
-                    {/* 外部链接提示 */}
-                    {news.url && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '12px',
-                        color: 'var(--primary)',
-                        marginTop: '8px',
-                      }}>
-                        <ExternalLink size={12} />
-                        查看原文
+                    {news.summary && <p className="news-card-summary">{news.summary}</p>}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {news.hasAttachment && (
+                          <>
+                            <Paperclip size={12} />
+                            <span>含附件</span>
+                          </>
+                        )}
                       </div>
-                    )}
+                      {news.url && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '12px',
+                          color: 'var(--primary)',
+                        }}>
+                          <ExternalLink size={12} />
+                          查看原文
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>

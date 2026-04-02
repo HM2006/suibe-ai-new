@@ -16,7 +16,11 @@ const BASE_URL = 'https://news.suibe.edu.cn';
 const LIST_URL_TEMPLATE = 'https://news.suibe.edu.cn/12512/list.htm'; // 第一页
 const LIST_PAGE_URL_TEMPLATE = 'https://news.suibe.edu.cn/12512/list{pageNum}.htm'; // 后续页
 const CATEGORY = '学校要闻';
-const MAX_CACHE_SIZE = 50; // 缓存最多保留的新闻条数
+const JWC_BASE_URL = 'https://jwc.suibe.edu.cn';
+const JWC_LIST_URL = 'https://jwc.suibe.edu.cn/tzggwxszl/list.htm';
+const JWC_LIST_PAGE_URL = 'https://jwc.suibe.edu.cn/tzggwxszl/list{pageNum}.htm';
+const JWC_CATEGORY = '教务通知';
+const MAX_CACHE_SIZE = 100; // 缓存最多保留的新闻条数
 const CRON_INTERVAL = 30 * 60 * 1000; // 定时抓取间隔：30分钟
 const REQUEST_TIMEOUT = 10000; // 请求超时：10秒
 
@@ -297,6 +301,134 @@ function parseNewsItemFallback($item) {
   }
 }
 
+// ==================== 教务处通知爬取 ====================
+
+/**
+ * 抓取教务处通知列表
+ * @param {number} pageNum - 页码，默认1
+ * @returns {Promise<Array>} 通知数组
+ */
+async function fetchJwcNoticeList(pageNum = 1) {
+  const url = pageNum === 1 ? JWC_LIST_URL : JWC_LIST_PAGE_URL.replace('{pageNum}', pageNum);
+
+  console.log(`[NewsCrawler] 正在抓取教务处通知，页码: ${pageNum}, URL: ${url}`);
+
+  try {
+    const response = await undiciFetch(url, {
+      headers: REQUEST_HEADERS,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+      dispatcher,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    return parseJwcNoticeList(html);
+  } catch (error) {
+    if (error.name === 'TimeoutError') {
+      console.error(`[NewsCrawler] 教务处请求超时: ${url}`);
+    } else {
+      console.error(`[NewsCrawler] 教务处抓取异常: ${error.message}`);
+    }
+    throw new Error(`抓取教务处通知失败: ${error.message}`);
+  }
+}
+
+/**
+ * 解析教务处通知列表HTML
+ * 教务处页面结构：列表项为 <li class="news nX clearfix">，内含标题链接和日期
+ * @param {string} html - 页面HTML
+ * @returns {Array} 通知数组
+ */
+function parseJwcNoticeList(html) {
+  const $ = cheerio.load(html);
+  const noticeList = [];
+
+  // 教务处列表结构：<ul class="news_list list2"> -> <li class="news nX clearfix">
+  const $items = $('li.news.clearfix');
+
+  if ($items.length === 0) {
+    // fallback
+    const $fallbackItems = $('.news_list li, .list_item, .wp_article_list li');
+    $fallbackItems.each((index, element) => {
+      const notice = parseJwcNoticeItem($(element));
+      if (notice) noticeList.push(notice);
+    });
+    return noticeList;
+  }
+
+  $items.each((index, element) => {
+    const $item = $(element);
+    const notice = parseJwcNoticeItem($item);
+    if (notice) noticeList.push(notice);
+  });
+
+  console.log(`[NewsCrawler] 成功解析 ${noticeList.length} 条教务处通知`);
+  return noticeList;
+}
+
+/**
+ * 解析单条教务处通知
+ * @param {cheerio.Cheerio} $item - cheerio包装的li元素
+ * @returns {Object|null} 通知对象
+ */
+function parseJwcNoticeItem($item) {
+  try {
+    // 提取标题和URL
+    const $titleLink = $item.find('a').first();
+    const title = $titleLink.attr('title') || $titleLink.text().trim();
+    let url = $titleLink.attr('href') || '';
+
+    if (!title) return null;
+
+    // 处理URL
+    if (!url.startsWith('http')) {
+      url = url.startsWith('/') ? JWC_BASE_URL + url : JWC_BASE_URL + '/' + url;
+    }
+
+    // 提取日期 - 教务处格式为 "2026-03-24" 或在span中
+    let date = '';
+    const $dateEl = $item.find('.news_meta, .news_date, .date, .meta_date, span').last();
+    if ($dateEl.length > 0) {
+      date = $dateEl.text().trim();
+    }
+
+    // 如果日期格式不标准，从URL中提取
+    if (!date || date.length < 8) {
+      const urlDateMatch = url.match(/\/(\d{4})\/(\d{4})\//);
+      if (urlDateMatch) {
+        const year = urlDateMatch[1];
+        const md = urlDateMatch[2];
+        date = `${year}-${md.substring(0, 2)}-${md.substring(2, 4)}`;
+      }
+    }
+
+    if (!date || date.length < 8) {
+      date = new Date().toISOString().split('T')[0];
+    }
+
+    // 教务处通知没有封面图，标记为附件类型
+    return {
+      id: generateId(url),
+      title: title,
+      url: url,
+      date: date,
+      summary: '', // 教务处通知通常无摘要
+      imageUrl: '', // 无封面图
+      category: JWC_CATEGORY,
+      hasAttachment: true, // 标记为有附件
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error(`[NewsCrawler] 解析教务处通知失败: ${error.message}`);
+    return null;
+  }
+}
+
+// ==================== 抓取新闻详情（校内页面） ====================
+
 /**
  * 抓取新闻详情（校内页面）
  * 微信公众号文章无法直接抓取详情，返回基础信息
@@ -427,8 +559,24 @@ function clearCache() {
 async function runFetchTask() {
   try {
     console.log(`[NewsCrawler] 开始定时抓取任务...`);
-    const newsList = await fetchNewsList(1);
-    updateCache(newsList);
+
+    // 并行抓取学校要闻和教务处通知
+    const [newsList, jwcList] = await Promise.allSettled([
+      fetchNewsList(1),
+      fetchJwcNoticeList(1),
+    ]);
+
+    if (newsList.status === 'fulfilled') {
+      updateCache(newsList.value);
+    } else {
+      console.error(`[NewsCrawler] 学校要闻抓取失败: ${newsList.reason?.message}`);
+    }
+
+    if (jwcList.status === 'fulfilled') {
+      updateCache(jwcList.value);
+    } else {
+      console.error(`[NewsCrawler] 教务处通知抓取失败: ${jwcList.reason?.message}`);
+    }
   } catch (error) {
     console.error(`[NewsCrawler] 定时抓取任务失败: ${error.message}`);
   }
@@ -472,6 +620,7 @@ function stopCron() {
 module.exports = {
   // 核心功能
   fetchNewsList,
+  fetchJwcNoticeList,
   fetchNewsDetail,
 
   // 缓存管理

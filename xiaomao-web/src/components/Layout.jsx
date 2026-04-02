@@ -57,7 +57,7 @@ function Layout({ children }) {
             <Sparkles size={22} />
           </div>
           <div>
-            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.1.1</span></div>
+            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.2.0</span></div>
             <div className="sidebar-subtitle">校园AI助手</div>
           </div>
         </div>
