@@ -233,6 +233,54 @@ router.get('/edu/grades', asyncHandler(async (req, res) => {
   res.json({ success: true, data: gradesData });
 }));
 
+// ==================== 合并同步 ====================
+
+/**
+ * GET /api/edu/sync - 一次请求同时获取课表和成绩并缓存
+ */
+router.get('/edu/sync', asyncHandler(async (req, res) => {
+  const eduProxy = getEduProxy();
+  const loggedIn = await eduProxy.checkLoginStatus();
+  if (!loggedIn) {
+    throw new AppError('未登录教务系统，请先完成扫码登录', 401, 'NOT_LOGGED_IN');
+  }
+
+  const { userId, semester } = req.query;
+
+  // 并行获取课表和成绩
+  const [scheduleData, gradesData] = await Promise.all([
+    eduProxy.getSchedule(),
+    eduProxy.getGrades()
+  ]);
+
+  // 按学期筛选成绩
+  if (semester && gradesData.grades) {
+    gradesData.grades = gradesData.grades.filter(g => g.semester === semester);
+    gradesData.courseCount = gradesData.grades.length;
+  }
+
+  // 缓存数据
+  if (userId) {
+    try {
+      const db = require('../services/database');
+      db.saveScheduleCache(parseInt(userId), scheduleData);
+      db.saveGradesCache(parseInt(userId), gradesData, gradesData.gpa, gradesData.totalCredits);
+      db.updateEduConnected(parseInt(userId), 1);
+      console.log(`[EduRoute] 同步数据已缓存到用户 ${userId}，已更新连接状态`);
+    } catch (cacheErr) {
+      console.warn('[EduRoute] 缓存同步数据失败:', cacheErr.message);
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      schedule: scheduleData,
+      grades: gradesData
+    }
+  });
+}));
+
 // ==================== 登出 ====================
 
 router.post('/edu/logout', asyncHandler(async (req, res) => {

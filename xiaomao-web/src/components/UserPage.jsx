@@ -349,66 +349,40 @@ function UserProfile() {
     }
   }
 
-  /* 教务系统登录成功后自动获取课表和成绩（一次性获取，获取完自动断开） */
+  /* 教务系统登录成功后一次性同步课表和成绩 */
   const handleEduLoginSuccess = useCallback(async () => {
     setShowEduLoginModal(false)
     setEduSyncing(true)
     setEduSyncStatus('')
-    let scheduleOk = false
-    let gradesOk = false
 
     try {
-      /* 获取课表数据 */
-      try {
-        const scheduleUrl = `${EDU_API_BASE}/schedule?userId=${user.id}`
-        const scheduleRes = await fetch(scheduleUrl)
-        if (scheduleRes.ok) {
-          const scheduleData = await scheduleRes.json()
-          if (scheduleData.success) {
-            scheduleOk = true
-            console.log('[UserPage] 课表数据同步成功')
-          }
+      /* 使用合并接口，一次请求同时获取课表和成绩 */
+      const syncUrl = `${EDU_API_BASE}/sync?userId=${user.id}`
+      const syncRes = await fetch(syncUrl)
+      if (syncRes.ok) {
+        const syncData = await syncRes.json()
+        if (syncData.success) {
+          console.log('[UserPage] 课表和成绩数据同步成功')
+          await refreshProfile()
+          setEduSyncStatus('success')
+        } else {
+          setEduSyncStatus('error')
         }
-      } catch (err) {
-        console.warn('[UserPage] 课表同步失败:', err)
-      }
-
-      /* 获取成绩数据（必须在课表之后，浏览器还在） */
-      try {
-        const gradesUrl = `${EDU_API_BASE}/grades?userId=${user.id}`
-        const gradesRes = await fetch(gradesUrl)
-        if (gradesRes.ok) {
-          const gradesData = await gradesRes.json()
-          if (gradesData.success) {
-            gradesOk = true
-            console.log('[UserPage] 成绩数据同步成功')
-          }
-        }
-      } catch (err) {
-        console.warn('[UserPage] 成绩同步失败:', err)
+      } else {
+        setEduSyncStatus('error')
       }
 
       /* 数据获取完毕，关闭浏览器释放资源 */
       try {
         await fetch(`${EDU_API_BASE}/logout?userId=${user.id}`, { method: 'POST' })
-        console.log('[UserPage] 教务浏览器已关闭')
       } catch (err) {
         console.warn('[UserPage] 关闭教务浏览器失败:', err)
-      }
-
-      /* 刷新用户信息（更新 edu_connected 状态） */
-      if (scheduleOk || gradesOk) {
-        await refreshProfile()
-        setEduSyncStatus('success')
-      } else {
-        setEduSyncStatus('error')
       }
     } catch (err) {
       console.error('[UserPage] 教务数据同步失败:', err)
       setEduSyncStatus('error')
     } finally {
       setEduSyncing(false)
-      /* 3秒后清除状态提示 */
       setTimeout(() => setEduSyncStatus(''), 3000)
     }
   }, [user?.id, refreshProfile])
