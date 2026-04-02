@@ -23,9 +23,6 @@ import {
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
-/* API基础路径 */
-const API_BASE = '/api/edu'
-
 /* 参评学期 */
 const TARGET_SEMESTER = '2025-2026-1'
 const TARGET_SEMESTER_LABEL = '2025-2026学年第一学期'
@@ -224,30 +221,34 @@ function ScholarshipPage() {
 
   const fileInputRef = useRef(null)
 
-  /* 加载成绩数据 */
+  /* 加载成绩数据（从用户缓存的教务数据中读取） */
   useEffect(() => {
     const loadGrades = async () => {
       if (!token) return
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`${API_BASE}/grades`, {
+        const res = await fetch('/api/user/profile', {
           headers: { 'Authorization': `Bearer ${token}` },
         })
-        if (!res.ok) throw new Error('获取成绩失败')
+        if (!res.ok) throw new Error('获取用户信息失败')
         const data = await res.json()
-        if (data.success && data.data) {
-          const grades = transformGrades(data.data.grades || data.data)
-          setAllGrades(grades)
-          setGradesLoaded(true)
+        if (data.success && data.data?.gradesCache) {
+          const gradesRaw = data.data.gradesCache.data
+          const grades = transformGrades(gradesRaw?.grades || gradesRaw)
+          if (grades && grades.length > 0) {
+            setAllGrades(grades)
+          } else {
+            setError('缓存中无成绩数据，请先在「用户」页面连接教务系统')
+          }
         } else {
-          throw new Error('成绩数据格式异常')
+          setError('未找到成绩缓存，请先在「用户」页面连接教务系统')
         }
       } catch (err) {
         console.error('加载成绩失败:', err)
         setError(err.message)
-        setGradesLoaded(true)
       } finally {
+        setGradesLoaded(true)
         setLoading(false)
       }
     }
