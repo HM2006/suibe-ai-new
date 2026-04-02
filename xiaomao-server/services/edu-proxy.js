@@ -297,8 +297,9 @@ class EduProxy {
       return false;
     }
     try {
-      const currentUrl = this.page.url();
-      return currentUrl.includes(EDU_HOST) && !currentUrl.includes('authserver');
+      // loggedIn 标志在 waitForLogin 中设置，直接信任即可
+      // 不再检查 URL（登录后页面可能在 authserver 域名下）
+      return true;
     } catch {
       return false;
     }
