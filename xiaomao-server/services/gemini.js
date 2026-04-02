@@ -7,7 +7,7 @@
 const axios = require('axios');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDAOsu4OQi-jY4ju5TkuLoMRzz5mEy19KQ';
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 const SYSTEM_INSTRUCTION = `你是一个专业的'课程总结助手'。你的核心任务是接收用户上传的课程考核、重点内容（包括文字、图片、文件格式），并输出精炼的文字版总结要点。
