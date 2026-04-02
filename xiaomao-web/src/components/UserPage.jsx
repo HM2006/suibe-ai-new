@@ -349,34 +349,47 @@ function UserProfile() {
     }
   }
 
-  /* 教务系统登录成功后一次性同步课表和成绩 */
+  /* 教务系统登录成功后自动获取课表和成绩 */
   const handleEduLoginSuccess = useCallback(async () => {
     setShowEduLoginModal(false)
     setEduSyncing(true)
     setEduSyncStatus('')
+    let scheduleOk = false
+    let gradesOk = false
 
     try {
-      /* 使用合并接口，一次请求同时获取课表和成绩 */
-      const syncUrl = `${EDU_API_BASE}/sync?userId=${user.id}`
-      const syncRes = await fetch(syncUrl)
-      if (syncRes.ok) {
-        const syncData = await syncRes.json()
-        if (syncData.success) {
-          console.log('[UserPage] 课表和成绩数据同步成功')
-          await refreshProfile()
-          setEduSyncStatus('success')
-        } else {
-          setEduSyncStatus('error')
+      /* 先获取课表 */
+      try {
+        const res = await fetch(`${EDU_API_BASE}/schedule?userId=${user.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success) { scheduleOk = true }
         }
-      } else {
-        setEduSyncStatus('error')
+      } catch (err) {
+        console.warn('[UserPage] 课表同步失败:', err)
       }
 
-      /* 数据获取完毕，关闭浏览器释放资源 */
+      /* 再获取成绩 */
+      try {
+        const res = await fetch(`${EDU_API_BASE}/grades?userId=${user.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success) { gradesOk = true }
+        }
+      } catch (err) {
+        console.warn('[UserPage] 成绩同步失败:', err)
+      }
+
+      /* 获取完毕，关闭浏览器 */
       try {
         await fetch(`${EDU_API_BASE}/logout?userId=${user.id}`, { method: 'POST' })
-      } catch (err) {
-        console.warn('[UserPage] 关闭教务浏览器失败:', err)
+      } catch (err) { /* ignore */ }
+
+      if (scheduleOk || gradesOk) {
+        await refreshProfile()
+        setEduSyncStatus('success')
+      } else {
+        setEduSyncStatus('error')
       }
     } catch (err) {
       console.error('[UserPage] 教务数据同步失败:', err)
