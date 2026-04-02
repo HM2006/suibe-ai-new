@@ -58,7 +58,7 @@ function CampusMap() {
   }
 
   return (
-    <div className="map-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#F8FAFC' }}>
+    <div className="map-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - var(--header-height) - 100px)', backgroundColor: '#F8FAFC' }}>
 
       {/* 头部信息 */}
       <div className="page-header" style={{ padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
