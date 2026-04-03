@@ -194,8 +194,25 @@ router.post('/notes/:id/summarize', authMiddleware, async (req, res) => {
     // 获取所有附件的完整数据（含base64）
     const attachmentsWithData = db.getNoteAttachmentsWithData(noteId);
 
-    // 直接传给Gemini，原生多模态，不做任何处理
-    const summary = await summarizeNote(note.content, attachmentsWithData);
+    // 提取纯文本（content可能是HTML格式，来自contentEditable）
+    let textContent = note.content || '';
+    // 简单去除HTML标签，保留文本内容
+    textContent = textContent.replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<li>/gi, '• ')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+
+    // 直接传给Gemini，原生多模态
+    const summary = await summarizeNote(textContent, attachmentsWithData);
 
     // 保存AI总结到数据库
     db.updateNote(noteId, { ai_summary: summary });
