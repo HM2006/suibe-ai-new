@@ -202,6 +202,25 @@ router.get('/edu/schedule', asyncHandler(async (req, res) => {
   res.json({ success: true, data: scheduleData });
 }));
 
+// ==================== MOOC课程查询 ====================
+
+router.get('/edu/mooc', asyncHandler(async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    throw new AppError('缺少userId参数', 400);
+  }
+
+  const db = require('../services/database');
+  const cache = db.getScheduleCache(parseInt(userId));
+
+  if (cache && cache.data && cache.data.moocCourses) {
+    return res.json({ success: true, data: cache.data.moocCourses, fromCache: true });
+  }
+
+  // 缓存中没有MOOC数据，返回空数组
+  res.json({ success: true, data: [], fromCache: false });
+}));
+
 // ==================== 成绩查询 ====================
 
 router.get('/edu/grades', asyncHandler(async (req, res) => {

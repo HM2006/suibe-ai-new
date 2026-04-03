@@ -14,6 +14,7 @@ import {
   User as UserIcon,
   Award,
   FileText,
+  GraduationCap,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -26,6 +27,7 @@ const navItems = [
   // { path: '/campus/library', label: '图书馆', icon: BookOpen }, // 暂时隐藏
   { path: '/campus/news', label: '资讯', icon: Newspaper },
   { path: '/notes', label: '随记', icon: FileText },
+  { path: '/mooc', label: 'MOOC', icon: GraduationCap },
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
@@ -40,6 +42,7 @@ function getPageTitle(pathname) {
     '/campus/library': { title: '图书馆', subtitle: '借阅与图书管理' },
     '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
     '/notes': { title: '随记', subtitle: '记录课程要点' },
+    '/mooc': { title: 'MOOC助手', subtitle: '网课学习管理' },
     '/scholarship': { title: '奖学金计算器', subtitle: '综合测评分数计算' },
   }
   return titleMap[pathname] || { title: '小贸', subtitle: '校园AI助手' }

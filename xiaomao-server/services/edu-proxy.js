@@ -384,6 +384,71 @@ class EduProxy {
         scheduleData[d] = dayMap[d] || [];
       }
 
+      /* 提取MOOC课程信息（在"全部课程"tab中，备注字段包含MOOC信息） */
+      let moocCourses = [];
+      try {
+        console.log('[EduProxy] 正在提取MOOC课程信息...');
+        /* 点击"全部课程"tab */
+        const allCourseTab = await this.page.$('li[data-toggle="tab"]:has(a:has-text("全部课程"))')
+          || await this.page.$('a:has-text("全部课程")');
+        if (allCourseTab) {
+          await allCourseTab.click();
+          await this._delay(3000);
+
+          /* 从"全部课程"tab的HTML中提取含MOOC/备注的课程 */
+          const allCourseHtml = await this.page.content();
+          const $all = cheerio.load(allCourseHtml);
+
+          /* 查找所有包含"备注"的单元格 */
+          $all('td, div, span').each((i, el) => {
+            const text = $all(el).text().trim();
+            if (!text.includes('备注') && !text.includes('MOOC') && !text.includes('mooc')) return;
+
+            /* 检查是否为MOOC课程 */
+            if (!text.includes('MOOC') && !text.includes('mooc')) return;
+
+            /* 提取课程名 */
+            let courseName = '';
+            const nameMatch = text.match(/（选）?([^\s]+(?:沟通|谈判|自我推销|职场|英语|体育|超星|智慧树|学堂)[^\s]*)/);
+            if (nameMatch) {
+              courseName = nameMatch[1].replace(/[A-Z]\d{10,}[\w-]*/g, '').replace(/（MOOC）/gi, '').replace(/（\d+）/g, '').trim();
+            }
+            if (!courseName) {
+              /* 通用提取：取第一个中文名称 */
+              const genericMatch = text.match(/（选）?([\u4e00-\u9fa5]{2,30}（MOOC）)/);
+              if (genericMatch) courseName = genericMatch[1].replace(/（MOOC）/gi, '').trim();
+            }
+            if (!courseName) return;
+
+            /* 匹配平台 */
+            let platform = { name: '其他平台', url: '' };
+            if (text.includes('学堂在线') || text.includes('雨课堂')) {
+              platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
+            } else if (text.includes('超星尔雅') || text.includes('超星')) {
+              platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
+            } else if (text.includes('智慧树')) {
+              platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
+            }
+
+            /* 提取备注链接 */
+            let remarkUrl = '';
+            const urlMatch = text.match(/(https?:\/\/[^\s"'）)]+)/);
+            if (urlMatch) remarkUrl = urlMatch[1];
+
+            moocCourses.push({ name: courseName, platform: platform.name, platformUrl: platform.url, remarkUrl });
+          });
+
+          /* 切回课表tab */
+          const scheduleTab = await this.page.$('li[data-toggle="tab"]:has(a:has-text("课表"))')
+            || await this.page.$('a:has-text("课表")');
+          if (scheduleTab) await scheduleTab.click();
+          await this._delay(1000);
+        }
+      } catch (err) {
+        console.warn('[EduProxy] MOOC信息提取失败:', err.message);
+      }
+      console.log(`[EduProxy] MOOC课程提取完成，发现 ${moocCourses.length} 门`);
+
       const now = new Date();
       let dayOfWeek = now.getDay();
       dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
@@ -397,7 +462,8 @@ class EduProxy {
         weekday: weekdays[dayOfWeek - 1],
         day: dayOfWeek,
         courseCount: totalCourses,
-        courses: scheduleData
+        courses: scheduleData,
+        moocCourses,
       };
     } catch (error) {
       console.error('[EduProxy] 获取课表失败:', error.message);
