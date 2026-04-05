@@ -16,7 +16,7 @@ import {
   Paperclip,
 } from 'lucide-react'
 
-const NEWS_API = 'https://api.mmxiong.xyz/api/campus/news'
+const NEWS_API = '/api/campus/news'
 
 /* 新闻分类配置 */
 const categories = [
@@ -279,7 +279,6 @@ function NewsPage() {
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'flex-end',
                           gap: '4px',
                           fontSize: '12px',
                           color: 'var(--primary)',

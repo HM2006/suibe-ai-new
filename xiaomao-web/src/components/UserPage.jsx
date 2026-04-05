@@ -9,8 +9,8 @@ import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart
 import EduLoginModal from './EduLoginModal'
 
 /* API基础路径 */
-const API_BASE = 'https://api.mmxiong.xyz/api/user'
-const EDU_API_BASE = 'https://api.mmxiong.xyz/api/edu'
+const API_BASE = '/api/user'
+const EDU_API_BASE = '/api/edu'
 
 /**
  * 登录表单组件

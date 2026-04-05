@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, QrCode, RefreshCw, CheckCircle, AlertCircle, Loader, LogIn } from 'lucide-react'
 
-const API_BASE = 'https://api.mmxiong.xyz/api/edu'
+const API_BASE = '/api/edu'
 
 /* 请求超时时间（毫秒） */
 const QR_FETCH_TIMEOUT = 60000

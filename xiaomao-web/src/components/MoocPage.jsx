@@ -49,7 +49,7 @@ function MoocPage() {
     if (!user?.id || !token) { setLoading(false); return }
     setLoading(true); setError('')
     try {
-      const res = await fetch(`https://api.mmxiong.xyz/api/edu/mooc?userId=${user.id}`, {
+      const res = await fetch(`/api/edu/mooc?userId=${user.id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       const data = await res.json()

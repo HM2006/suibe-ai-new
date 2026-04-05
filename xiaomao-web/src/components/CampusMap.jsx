@@ -61,36 +61,30 @@ function CampusMap() {
     <div className="map-container" style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F8FAFC' }}>
 
       {/* 头部信息 */}
-     <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 className="page-title">校园导航</h1>
-          <p className="page-desc">查看各校园地点和路线</p>
-        </div>
-    
+      <div className="page-header" style={{ padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+        <h1 className="page-title" style={{ margin: 0, fontSize: '20px', color: '#0F172A' }}>校园导航</h1>
+        <p className="page-desc" style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B' }}>
+          SUIBE 松江校区 · 2D平面全景图 (上北下南)
+        </p>
       </div>
 
-    {/* 搜索框 */}
-<div className="map-search" style={{ padding: '0 20px 12px' }}>
-  {/* 在下面这一行添加 width: '100%' */}
-  <div style={{ position: 'relative', display: 'flex', width: '100%' }}> 
-    <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-    <input
-      type="text"
-      placeholder="搜索建筑、食堂、地标名称..."
-      value={searchText}
-      onChange={(e) => setSearchText(e.target.value)}
-      style={{
-        width: '100%', // 确保 input 占满父容器
-        padding: '10px 12px 10px 38px',
-        borderRadius: '8px',
-        border: '1px solid #E2E8F0',
-        outline: 'none',
-        fontSize: '14px',
-        backgroundColor: '#F1F5F9'
-      }}
-    />
-  </div>
-</div>
+      {/* 搜索框 */}
+      <div className="map-search" style={{ padding: '12px 20px', backgroundColor: '#fff' }}>
+        <div style={{ position: 'relative', display: 'flex' }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+          <input
+            type="text"
+            placeholder="搜索建筑、食堂、地标名称..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 12px 10px 38px',
+              borderRadius: '8px', border: '1px solid #E2E8F0',
+              outline: 'none', fontSize: '14px', backgroundColor: '#F1F5F9'
+            }}
+          />
+        </div>
+      </div>
 
       {/* SVG 专业平面地图区 */}
       <div className="map-canvas" style={{ flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#F1F5F9' }}>
@@ -217,7 +211,7 @@ function CampusMap() {
 
       {/* POI列表 */}
       <div className="poi-list" style={{
-        maxHeight: '240px', overflowY: 'auto',
+        maxHeight: '240px', overflowY: 'auto', backgroundColor: '#fff',
         borderTop: '1px solid #E2E8F0', padding: '8px 12px',
       }}>
         {filteredPois.map((poi) => (

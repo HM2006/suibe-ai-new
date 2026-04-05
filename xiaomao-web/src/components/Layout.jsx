@@ -8,43 +8,49 @@ import {
   Map,
   Calendar,
   BarChart3,
+  BookOpen,
   Newspaper,
   Sparkles,
   User as UserIcon,
+  Award,
   FileText,
+  GraduationCap,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
-/* 底部导航菜单配置（移动端6个核心项目） */
+/* 导航菜单配置 */
 const navItems = [
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
-  { path: '/campus/map', label: '导航', icon: Map },
+  { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
-  { path: '/notes', label: '随记', icon: FileText },
+  // { path: '/campus/library', label: '图书馆', icon: BookOpen }, // 暂时隐藏
   { path: '/campus/news', label: '资讯', icon: Newspaper },
+  { path: '/notes', label: '随记', icon: FileText },
+  { path: '/mooc', label: 'MOOC', icon: GraduationCap },
+  { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
 /* 根据当前路径获取页面标题 */
 function getPageTitle(pathname) {
   const titleMap = {
-    '/chat': { title: 'AI对话', subtitle: '' },
-    '/campus': { title: '校园服务', subtitle: '' },
-    '/campus/map': { title: '校园导航', subtitle: '' },
-    '/campus/schedule': { title: '课表查询', subtitle: '' },
-    '/campus/grades': { title: '成绩查询', subtitle: '' },
-    '/campus/library': { title: '图书馆', subtitle: '' },
-    '/campus/news': { title: '校园资讯', subtitle: '' },
-    '/notes': { title: '随记', subtitle: '' },
-    '/mooc': { title: 'MOOC助手', subtitle: '' },
-    '/scholarship': { title: '奖学金计算器', subtitle: '' },
+    '/chat': { title: 'AI对话', subtitle: '和小贸聊聊天' },
+    '/campus': { title: '校园服务', subtitle: '一站式校园生活' },
+    '/campus/map': { title: '校园导航', subtitle: '快速找到目的地' },
+    '/campus/schedule': { title: '课表查询', subtitle: '查看本周课程安排' },
+    '/campus/grades': { title: '成绩查询', subtitle: '查看各科成绩' },
+    '/campus/library': { title: '图书馆', subtitle: '借阅与图书管理' },
+    '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
+    '/notes': { title: '随记', subtitle: '记录课程要点' },
+    '/mooc': { title: 'MOOC助手', subtitle: '网课学习管理' },
+    '/scholarship': { title: '奖学金计算器', subtitle: '综合测评分数计算' },
   }
-  return titleMap[pathname] || { title: '小贸', subtitle: '' }
+  return titleMap[pathname] || { title: '小贸', subtitle: '校园AI助手' }
 }
 
 function Layout({ children }) {
   const location = useLocation()
-  const { title } = getPageTitle(location.pathname)
+  const { title, subtitle } = getPageTitle(location.pathname)
   const { user } = useUser()
 
   return (
@@ -85,7 +91,8 @@ function Layout({ children }) {
         {/* 顶部标题栏 */}
         <header className="top-header">
           <div style={{ flex: 1 }}>
-            {/* 移除重复标题，由各页面组件自行显示 */}
+            <div className="top-header-title">{title}</div>
+            <div className="top-header-subtitle">{subtitle}</div>
           </div>
           {/* 用户入口 - 右上角 */}
           <Link to="/user" style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)' }}>

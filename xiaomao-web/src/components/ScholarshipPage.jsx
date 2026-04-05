@@ -228,7 +228,7 @@ function ScholarshipPage() {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch('https://api.mmxiong.xyz/api/user/profile', {
+        const res = await fetch('/api/user/profile', {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('获取用户信息失败')

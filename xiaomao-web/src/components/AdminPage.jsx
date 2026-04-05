@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 /* API基础路径 */
-const API_BASE = 'https://api.mmxiong.xyz/api/admin'
+const API_BASE = '/api/admin'
 
 /**
  * 格式化日期时间

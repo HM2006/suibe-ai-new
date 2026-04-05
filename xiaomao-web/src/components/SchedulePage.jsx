@@ -145,7 +145,7 @@ function SchedulePage() {
     const loadData = async () => {
       if (!token) return
       try {
-        const res = await fetch('https://api.mmxiong.xyz/api/user/profile', {
+        const res = await fetch('/api/user/profile', {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) return
@@ -315,21 +315,20 @@ function SchedulePage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
-                      padding: '14px 16px',
-                      background: colorConfig.bg,
-                      border: `1px solid ${isCurrent ? 'var(--primary)' : colorConfig.border}`,
+                      padding: '12px 16px',
+                      background: 'var(--card-bg)',
+                      border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--card-border)'}`,
                       borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      transition: 'all var(--transition-fast)',
+                      boxShadow: isCurrent ? '0 0 0 2px rgba(79,70,229,0.1)' : 'none',
+                      transition: 'box-shadow 0.15s, border-color 0.15s',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)'
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--primary)'
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
-                    }}>
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--card-border)'
+                    }}
+                  >
                     <div
                       style={{
                         width: '4px',

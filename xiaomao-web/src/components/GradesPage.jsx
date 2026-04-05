@@ -123,7 +123,7 @@ function GradesPage() {
     const loadCachedGrades = async () => {
       if (!token) return
       try {
-        const res = await fetch('https://api.mmxiong.xyz/api/user/profile', {
+        const res = await fetch('/api/user/profile', {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) return

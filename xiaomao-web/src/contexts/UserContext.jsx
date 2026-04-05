@@ -10,7 +10,7 @@ const UserContext = createContext(null)
 const TOKEN_KEY = 'xiaomao_token'
 
 /* API基础路径 */
-const API_BASE = 'https://api.mmxiong.xyz/api/user'
+const API_BASE = '/api/user'
 
 /**
  * 用户上下文Provider
