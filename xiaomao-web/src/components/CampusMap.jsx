@@ -58,7 +58,7 @@ function CampusMap() {
   }
 
   return (
-    <div className="map-container" style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F8FAFC' }}>
+    <div className="map-container" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#F8FAFC' }}>
 
       {/* 头部信息 */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
@@ -89,7 +89,7 @@ function CampusMap() {
       </div>
 
       {/* SVG 专业平面地图区 */}
-      <div className="map-canvas" style={{ flex: 1, overflow: 'hidden', position: 'relative', backgroundColor: '#F1F5F9' }}>
+      <div className="map-canvas" style={{ flex: 1, minHeight: '300px', overflow: 'hidden', position: 'relative', backgroundColor: '#F1F5F9' }}>
         <svg
           viewBox="0 0 800 600"
           preserveAspectRatio="xMidYMid meet"
