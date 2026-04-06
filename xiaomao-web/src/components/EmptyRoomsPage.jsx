@@ -144,6 +144,51 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
         })}
       </div>
 
+      {/* 点阵图 */}
+      <div style={{
+        background: 'var(--card-bg)', borderRadius: '14px', overflow: 'hidden',
+        border: '1px solid var(--card-border)', marginBottom: '16px',
+      }}>
+        <div style={{ padding: '14px 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>📊 教室占用点阵图</span>
+          <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#10B981', display: 'inline-block' }} /> 空闲</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#EF4444', display: 'inline-block' }} /> 占用</span>
+          </span>
+        </div>
+        <div style={{ padding: '16px', overflowX: 'auto' }}>
+          {buildings.map(bn => {
+            const br = data.b[bn]
+            const dd = data.s[date]
+            const roomIds = Object.keys(br)
+            return (
+              <div key={bn} style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>{bn}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {roomIds.map(id => {
+                    const mask = (dd && dd[bn] && dd[bn][id]) || 0
+                    const free = isFree(mask, period)
+                    return (
+                      <div key={id} title={`${br[id][1]}（${br[id][0]}座）- ${free ? '空闲' : '占用'}`}
+                        style={{
+                          width: '14px', height: '14px', borderRadius: '3px',
+                          background: free ? '#10B981' : '#EF4444',
+                          opacity: free ? 0.85 : 0.7,
+                          transition: 'transform 0.15s, box-shadow 0.15s',
+                          cursor: 'default',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.6)'; e.currentTarget.style.boxShadow = free ? '0 0 6px rgba(16,185,129,0.5)' : '0 0 6px rgba(239,68,68,0.5)'; e.currentTarget.style.zIndex = '10'; e.currentTarget.style.position = 'relative'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.zIndex = ''; e.currentTarget.style.position = ''; }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* 教室表格 */}
       <div style={{
         background: 'var(--card-bg)', borderRadius: '14px', overflow: 'hidden',
