@@ -17,6 +17,7 @@ import AdminPage from './components/AdminPage'
 import ScholarshipPage from './components/ScholarshipPage'
 import NotesPage from './components/NotesPage'
 import MoocPage from './components/MoocPage'
+import EmptyRoomsPage from './components/EmptyRoomsPage'
 
 function App() {
   return (
@@ -58,6 +59,7 @@ function App() {
         {/* 随记 */}
         <Route path="/notes" element={<Layout><NotesPage /></Layout>} />
         <Route path="/mooc" element={<Layout><MoocPage /></Layout>} />
+        <Route path="/empty-rooms" element={<Layout><EmptyRoomsPage /></Layout>} />
       </Routes>
     </UserProvider>
   )

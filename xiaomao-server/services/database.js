@@ -132,6 +132,46 @@ function init() {
     );
   `);
 
+  // 创建空教室数据表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS empty_rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      room_id TEXT NOT NULL,
+      room_name TEXT NOT NULL,
+      building TEXT NOT NULL,
+      capacity INTEGER NOT NULL DEFAULT 0,
+      slot_1 INTEGER NOT NULL DEFAULT 0,
+      slot_2 INTEGER NOT NULL DEFAULT 0,
+      slot_3 INTEGER NOT NULL DEFAULT 0,
+      slot_4 INTEGER NOT NULL DEFAULT 0,
+      slot_5 INTEGER NOT NULL DEFAULT 0,
+      slot_6 INTEGER NOT NULL DEFAULT 0,
+      slot_7 INTEGER NOT NULL DEFAULT 0,
+      slot_8 INTEGER NOT NULL DEFAULT 0,
+      slot_9 INTEGER NOT NULL DEFAULT 0,
+      slot_10 INTEGER NOT NULL DEFAULT 0,
+      slot_11 INTEGER NOT NULL DEFAULT 0,
+      slot_12 INTEGER NOT NULL DEFAULT 0,
+      slot_13 INTEGER NOT NULL DEFAULT 0,
+      slot_14 INTEGER NOT NULL DEFAULT 0,
+      course_name TEXT DEFAULT '',
+      teacher TEXT DEFAULT '',
+      class_time TEXT DEFAULT '',
+      UNIQUE(date, room_id)
+    );
+  `);
+
+  // 创建空教室抓取元数据表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS empty_rooms_meta (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT UNIQUE NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+
   console.log('[DB] 数据库表初始化完成');
 }
 
@@ -485,8 +525,17 @@ function getUserCourseNames(userId) {
   return Array.from(nameSet);
 }
 
+/**
+ * 获取数据库实例（供需要直接操作db的模块使用）
+ * @returns {Database}
+ */
+function getDB() {
+  return db;
+}
+
 module.exports = {
   init,
+  getDB,
   getUserByUsername,
   getUserById,
   createUser,

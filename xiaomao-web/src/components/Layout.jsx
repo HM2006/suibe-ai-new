@@ -15,6 +15,7 @@ import {
   Award,
   FileText,
   GraduationCap,
+  DoorOpen,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -28,6 +29,7 @@ const navItems = [
   { path: '/campus/news', label: '资讯', icon: Newspaper },
   { path: '/notes', label: '随记', icon: FileText },
   { path: '/mooc', label: 'MOOC', icon: GraduationCap },
+  { path: '/empty-rooms', label: '空教室', icon: DoorOpen },
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
@@ -43,6 +45,7 @@ function getPageTitle(pathname) {
     '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
     '/notes': { title: '随记', subtitle: '记录课程要点' },
     '/mooc': { title: 'MOOC助手', subtitle: '网课学习管理' },
+    '/empty-rooms': { title: '空教室查询', subtitle: '快速找到空闲教室' },
     '/scholarship': { title: '奖学金计算器', subtitle: '综合测评分数计算' },
   }
   return titleMap[pathname] || { title: '小贸', subtitle: '校园AI助手' }
