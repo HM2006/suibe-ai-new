@@ -2536,13 +2536,9 @@ select {
     margin-top: 16px;
   }
 
-  /* 随记卡片切换：移动端显示原生风格，隐藏桌面风格 */
+  /* 随记卡片切换：移动端显示原生风格（note-card-native 样式叠加生效） */
   .note-card-native {
     display: flex;
-  }
-
-  .note-card {
-    display: none;
   }
 }
 
