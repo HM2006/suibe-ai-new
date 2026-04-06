@@ -25,63 +25,46 @@ function getToday() { return new Date().toISOString().split('T')[0] }
 
 function isFree(mask, p) { return !(mask & (1 << p)) }
 
-/* ========== 数据 Hook ========== */
-function useRoomData() {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+/* ========== 数据 ========== */
+import roomData from '../../public/empty-rooms-data.json'
 
-  useEffect(() => {
-    fetch('/empty-rooms-data.json')
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [])
-
-  const buildings = useMemo(() => data ? Object.keys(data.b) : [], [data])
-  const dates = useMemo(() => data ? Object.keys(data.s).sort() : [], [data])
-
-  const getEmpty = useMemo(() => (date, period, building) => {
-    if (!data) return []
-    const dd = data.s[date]
-    if (!dd || !dd[building]) return []
-    const br = data.b[building]
-    const occ = dd[building]
-    return Object.keys(br)
-      .filter(id => !occ[id] || isFree(occ[id], period))
-      .map(id => ({ id, seats: br[id][0], name: br[id][1], building }))
-  }, [data])
-
-  return { data, loading, buildings, dates, getEmpty }
-}
+const BUILDINGS = Object.keys(roomData.b)
+const DATES = Object.keys(roomData.s).sort()
 
 /* ========== 表格总览 ========== */
-function OverviewTab({ data, buildings, dates, getEmpty }) {
+function getEmpty(date, period, building) {
+  const dd = roomData.s[date]
+  if (!dd || !dd[building]) return []
+  const br = roomData.b[building]
+  const occ = dd[building]
+  return Object.keys(br)
+    .filter(id => !occ[id] || isFree(occ[id], period))
+    .map(id => ({ id, seats: br[id][0], name: br[id][1], building }))
+}
+
+function OverviewTab() {
   const [date, setDate] = useState('')
   const [period, setPeriod] = useState(1)
 
-  // 初始化日期
   useEffect(() => {
-    if (dates.length === 0) return
+    if (DATES.length === 0) return
     const today = getToday()
-    setDate(dates.includes(today) ? today : dates[0])
-  }, [dates])
+    setDate(DATES.includes(today) ? today : DATES[0])
+  }, [])
 
   const stats = useMemo(() => {
-    if (!date || !data) return null
-    const dd = data.s[date]
+    if (!date) return null
+    const dd = roomData.s[date]
     if (!dd) return null
     const result = {}
-    let totalEmpty = 0, totalRooms = 0
-    buildings.forEach(bn => {
-      const br = data.b[bn]
+    BUILDINGS.forEach(bn => {
+      const br = roomData.b[bn]
       const empty = getEmpty(date, period, bn)
       const all = Object.keys(br).length
-      totalEmpty += empty.length
-      totalRooms += all
       result[bn] = { empty, all, pct: all ? Math.round(empty.length / all * 100) : 0 }
     })
-    return { result, totalEmpty, totalRooms }
-  }, [date, period, data, buildings, getEmpty])
+    return result
+  }, [date, period])
 
   if (!date || !stats) {
     return <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>该日期无数据</div>
@@ -94,7 +77,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
           <Calendar size={14} /> 选择日期
         </div>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} min={dates[0]} max={dates[dates.length - 1]}
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} min={DATES[0]} max={DATES[DATES.length - 1]}
           style={{
             padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--card-border)',
             background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
@@ -126,7 +109,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
 
       {/* 统计卡片 */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {buildings.map(bn => {
+        {BUILDINGS.map(bn => {
           const s = stats.result[bn]
           return (
             <div key={bn} style={{
@@ -165,8 +148,8 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
               </tr>
             </thead>
             <tbody>
-              {buildings.map(bn => {
-                const br = data.b[bn]
+              {BUILDINGS.map(bn => {
+                const br = roomData.b[bn]
                 const emptySet = new Set(getEmpty(date, period, bn).map(r => r.id))
                 const emptyCount = emptySet.size
                 const allCount = Object.keys(br).length
@@ -208,7 +191,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
 }
 
 /* ========== AI 对话 ========== */
-function AiTab({ data, buildings, dates }) {
+function AiTab() {
   const chatRef = useRef(null)
   const [started, setStarted] = useState(false)
   const [messages, setMessages] = useState([])
@@ -234,7 +217,7 @@ function AiTab({ data, buildings, dates }) {
   const askDate = () => {
     setStep(1)
     const today = getToday()
-    const futureDates = dates.filter(d => d >= today).slice(0, 8)
+    const futureDates = DATES.filter(d => d >= today).slice(0, 8)
     const opts = futureDates.map(d =>
       `<button class="opt" onclick="window.__sd('${d}')">${d}（${getWeekday(d)}）</button>`
     ).join('')
@@ -294,12 +277,12 @@ function AiTab({ data, buildings, dates }) {
 
     // 查找完全匹配
     const res = []
-    buildings.forEach(bn => {
-      const br = data.b[bn]
+    BUILDINGS.forEach(bn => {
+      const br = roomData.b[bn]
       Object.keys(br).forEach(id => {
         let ok = true
         periods.forEach(p => {
-          const dd = data.s[date]
+          const dd = roomData.s[date]
           if (dd && dd[bn] && dd[bn][id] && !isFree(dd[bn][id], p)) ok = false
         })
         if (ok && br[id][0] >= minSeats) res.push({ id, name: br[id][1], seats: br[id][0], building: bn })
@@ -321,12 +304,12 @@ function AiTab({ data, buildings, dates }) {
       const alt = []
       // 策略1: 不限座位数
       if (minSeats > 0) {
-        buildings.forEach(bn => {
-          const br = data.b[bn]
+        BUILDINGS.forEach(bn => {
+          const br = roomData.b[bn]
           Object.keys(br).forEach(id => {
             let ok = true
             periods.forEach(p => {
-              const dd = data.s[date]
+              const dd = roomData.s[date]
               if (dd && dd[bn] && dd[bn][id] && !isFree(dd[bn][id], p)) ok = false
             })
             if (ok) alt.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `座位数${br[id][0]}座（要求${minSeats}+）`, fp: periods.length })
@@ -335,10 +318,10 @@ function AiTab({ data, buildings, dates }) {
       }
       // 策略2: 部分节次空闲
       if (alt.length === 0) {
-        buildings.forEach(bn => {
-          const br = data.b[bn]
+        BUILDINGS.forEach(bn => {
+          const br = roomData.b[bn]
           Object.keys(br).forEach(id => {
-            const dd = data.s[date]
+            const dd = roomData.s[date]
             const mask = (dd && dd[bn] && dd[bn][id]) || 0
             const fp = periods.filter(p => isFree(mask, p))
             if (fp.length) alt.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `仅${fp.map(p => PERIODS[p]).join('、')}空闲`, fp })
@@ -425,29 +408,7 @@ function AiTab({ data, buildings, dates }) {
 
 /* ========== 主页面 ========== */
 function EmptyRoomsPage() {
-  const { data, loading, buildings, dates, getEmpty } = useRoomData()
   const [mode, setMode] = useState('overview')
-
-  if (loading) {
-    return (
-      <div className="notes-container">
-        <div style={{ textAlign: 'center', padding: '60px' }}>
-          <Loader size={24} style={{ animation: 'spin 1s linear infinite', display: 'inline-block', color: 'var(--text-muted)' }} />
-          <p style={{ color: 'var(--text-muted)', marginTop: '12px', fontSize: '14px' }}>加载空教室数据...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!data) {
-    return (
-      <div className="notes-container">
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
-          <p style={{ fontSize: '14px' }}>数据加载失败，请刷新重试</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="notes-container">
@@ -473,7 +434,7 @@ function EmptyRoomsPage() {
 
       <div className="page-header">
         <h1 className="page-title">空教室查询</h1>
-        <p className="page-desc">2025-2026学年第二学期 · {dates.length}天数据</p>
+        <p className="page-desc">2025-2026学年第二学期 · {DATES.length}天数据</p>
       </div>
 
       {/* 模式切换 */}
@@ -504,8 +465,8 @@ function EmptyRoomsPage() {
       </div>
 
       {mode === 'overview'
-        ? <OverviewTab data={data} buildings={buildings} dates={dates} getEmpty={getEmpty} />
-        : <AiTab data={data} buildings={buildings} dates={dates} />
+        ? <OverviewTab />
+        : <AiTab />
       }
 
       <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '11px' }}>
