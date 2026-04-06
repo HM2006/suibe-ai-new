@@ -58,6 +58,7 @@ function useRoomData() {
 function OverviewTab({ data, buildings, dates, getEmpty }) {
   const [date, setDate] = useState('')
   const [period, setPeriod] = useState(1)
+  const [showFreeOnly, setShowFreeOnly] = useState(false)
 
   // 初始化日期
   useEffect(() => {
@@ -196,6 +197,16 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
       }}>
         <div style={{ padding: '14px 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--card-border)' }}>
           📋 {date}（{getWeekday(date)}）{PERIODS[period]}（{PERIOD_TIMES[period]}）空教室情况
+          <button onClick={() => setShowFreeOnly(!showFreeOnly)}
+            style={{
+              marginLeft: 'auto', padding: '4px 12px', borderRadius: '16px', border: '1.5px solid',
+              borderColor: showFreeOnly ? '#059669' : 'var(--card-border)',
+              background: showFreeOnly ? '#D1FAE5' : 'transparent',
+              color: showFreeOnly ? '#059669' : 'var(--text-muted)',
+              fontSize: '12px', cursor: 'pointer', fontWeight: 500,
+            }}>
+            {showFreeOnly ? '✅ 只看空闲' : '显示全部'}
+          </button>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -230,6 +241,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
                     </tr>
                     {Object.keys(br).map(id => {
                       const free = emptySet.has(id)
+                      if (showFreeOnly && !free) return null
                       return (
                         <tr key={id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                           <td></td>
