@@ -2,10 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  /* 使用相对路径，兼容 Capacitor 原生应用加载本地资源 */
-  base: './',
+  /* App构建用相对路径（Capacitor加载本地文件），Web构建用绝对路径 */
+  base: mode === 'app' ? './' : '/',
   server: {
     proxy: {
       '/api': {
@@ -14,4 +14,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
