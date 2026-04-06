@@ -595,7 +595,7 @@ function NotesPage() {
     try {
       const notesRes = await fetch(API_BASE, { headers: { 'Authorization': `Bearer ${token}` } })
       const notesData = await notesRes.json()
-      if (notesData.success) setNotes(notesData.data)
+      if (notesData.success) setNotes(Array.isArray(notesData.data) ? notesData.data : [])
     } catch (err) { console.warn('加载随记失败:', err) }
 
     /* 课程列表接口可能不存在，独立请求并优雅降级 */
