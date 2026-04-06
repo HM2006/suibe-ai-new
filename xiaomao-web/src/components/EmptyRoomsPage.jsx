@@ -134,7 +134,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
               background: 'linear-gradient(135deg, rgba(79,70,229,0.08), rgba(124,58,237,0.06))',
             }}>
               <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--primary)' }}>
-                {s.empty}<span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>/{s.all}</span>
+                {s.empty.length}<span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>/{s.all}</span>
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                 {bn} · 空闲率{s.pct}%
