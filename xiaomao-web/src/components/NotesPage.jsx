@@ -95,7 +95,7 @@ function Toast({ message, onDone }) {
 /* ========== 便签卡片（列表） ========== */
 function NoteCard({ note, onClick }) {
   return (
-    <div className="note-card note-card-native" onClick={onClick}
+    <div className="note-card" onClick={onClick}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--card-border)'; e.currentTarget.style.boxShadow = 'none' }}
     >
