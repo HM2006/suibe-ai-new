@@ -18,6 +18,7 @@ import ScholarshipPage from './components/ScholarshipPage'
 import NotesPage from './components/NotesPage'
 import MoocPage from './components/MoocPage'
 import EmptyRoomsPage from './components/EmptyRoomsPage'
+import ParkPage from './components/ParkPage'
 
 function App() {
   return (
@@ -60,6 +61,7 @@ function App() {
         <Route path="/notes" element={<Layout><NotesPage /></Layout>} />
         <Route path="/mooc" element={<Layout><MoocPage /></Layout>} />
         <Route path="/empty-rooms" element={<Layout><EmptyRoomsPage /></Layout>} />
+        <Route path="/park" element={<Layout><ParkPage /></Layout>} />
       </Routes>
     </UserProvider>
   )

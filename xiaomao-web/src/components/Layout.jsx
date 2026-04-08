@@ -18,6 +18,7 @@ import {
   FileText,
   GraduationCap,
   DoorOpen,
+  Car,
   Grid2X2,
   X,
 } from 'lucide-react'
@@ -34,6 +35,7 @@ const sidebarNavItems = [
   { path: '/notes', label: '随记', icon: FileText },
   { path: '/mooc', label: 'MOOC', icon: GraduationCap },
   { path: '/empty-rooms', label: '空教室', icon: DoorOpen },
+  { path: '/park', label: '停车', icon: Car },
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
@@ -51,6 +53,7 @@ const moreNavItems = [
   { path: '/campus/grades', label: '成绩查询', icon: BarChart3, desc: '查看各科成绩' },
   { path: '/mooc', label: 'MOOC助手', icon: GraduationCap, desc: '网课学习管理' },
   { path: '/empty-rooms', label: '空教室查询', icon: DoorOpen, desc: '快速找到空闲教室' },
+  { path: '/park', label: '停车定位', icon: Car, desc: '记录停车位置' },
   { path: '/scholarship', label: '奖学金计算器', icon: Award, desc: '综合测评分数计算' },
 ]
 
