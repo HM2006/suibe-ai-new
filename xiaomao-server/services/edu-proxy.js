@@ -219,14 +219,33 @@ class EduProxy {
       this.authSessionId = this.cookieJar['JSESSIONID'] || null;
       console.log(`[EduProxy] 步骤2完成：JSESSIONID=${this.authSessionId ? '已获取' : '未获取'}`);
 
-      /* 从 HTML 中提取 lt ticket */
+      /* 从 HTML 中提取表单隐藏字段 */
       const html = authResponse.data || '';
-      const ltMatch = html.match(/name="lt"\s+value="([^"]+)"/);
-      if (!ltMatch) {
+      const $ = require('cheerio').load(html);
+      const $form = $('#qrLoginForm');
+
+      /* 提取表单 action URL（包含 jsessionid） */
+      let formAction = $form.attr('action') || '';
+      if (formAction.startsWith('/')) {
+        formAction = AUTH_BASE_URL + formAction;
+      }
+      this.loginFormAction = formAction;
+      console.log(`[EduProxy] 表单 action: ${formAction.substring(0, 100)}...`);
+
+      /* 提取所有隐藏字段 */
+      this.loginFormFields = {};
+      $form.find('input[type="hidden"]').each((_, el) => {
+        const name = $(el).attr('name');
+        const value = $(el).attr('value') || '';
+        if (name) this.loginFormFields[name] = value;
+      });
+
+      this.ltTicket = this.loginFormFields['lt'];
+      if (!this.ltTicket) {
         throw new Error('无法从认证页面提取 lt ticket，页面结构可能已变更');
       }
-      this.ltTicket = ltMatch[1];
       console.log(`[EduProxy] lt ticket: ${this.ltTicket}`);
+      console.log(`[EduProxy] 表单字段: ${Object.keys(this.loginFormFields).join(', ')}`);
 
       /*
        * 步骤3：GET /authserver/qrCode/get → 获取二维码 UUID
@@ -254,6 +273,11 @@ class EduProxy {
         throw new Error(`获取二维码 UUID 失败: ${this.qrUuid}`);
       }
       console.log(`[EduProxy] 步骤3完成：UUID=${this.qrUuid}`);
+
+      /* 更新表单的 uuid 字段（模拟前端 $("#uuid").val(data)） */
+      if (this.loginFormFields) {
+        this.loginFormFields['uuid'] = this.qrUuid;
+      }
 
       /*
        * 步骤4：GET /authserver/qrCode/code?uuid=UUID → 获取二维码图片
@@ -380,21 +404,30 @@ class EduProxy {
   async _submitLoginForm(serviceParam) {
     try {
       /*
-       * POST /authserver/login
-       * 表单参数: lt={ticket}&dllt=qrLogin&uuid={uuid}
-       * 让 axios 自动跟随重定向链收集 cookie
+       * POST 表单到 authserver（模拟 $("#qrLoginForm").submit()）
+       * 使用从 HTML 中提取的完整表单字段和 action URL
+       *
+       * 表单字段包括：lt, uuid, dllt, execution, _eventId, rmShown
+       * action URL 包含 jsessionid: /authserver/login;jsessionid=xxx?service=...
        */
+      const formUrl = this.loginFormAction || `${AUTH_LOGIN_URL}?service=${serviceParam}`;
+      const formFields = this.loginFormFields || {
+        lt: this.ltTicket,
+        dllt: 'qrLogin',
+        uuid: this.qrUuid,
+      };
+
+      console.log(`[EduProxy] 提交登录表单到: ${formUrl.substring(0, 100)}...`);
+      console.log(`[EduProxy] 表单字段: ${JSON.stringify(formFields)}`);
+
       const loginResponse = await axios.post(
-        `${AUTH_LOGIN_URL}?service=${serviceParam}`,
-        new URLSearchParams({
-          lt: this.ltTicket,
-          dllt: 'qrLogin',
-          uuid: this.qrUuid,
-        }).toString(),
+        formUrl,
+        new URLSearchParams(formFields).toString(),
         this._cookieCaptureConfig({
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Origin': AUTH_BASE_URL,
         })
       );
 
@@ -404,15 +437,25 @@ class EduProxy {
       const finalUrl = loginResponse.request?.res?.responseUrl || loginResponse.config?.url || '';
       console.log(`[EduProxy] 登录重定向完成，最终 URL: ${finalUrl}`);
 
-      if (finalUrl.includes(EDU_HOST) || loginResponse.data?.includes?.(EDU_HOST)) {
+      if (finalUrl.includes(EDU_HOST)) {
         console.log('[EduProxy] 已成功重定向回教务系统');
+      } else if (finalUrl.includes('authserver')) {
+        /* 如果还在 authserver，说明登录被拒绝 */
+        console.error('[EduProxy] 登录被拒绝，仍在认证服务器');
+        throw new Error('登录被拒绝，请检查二维码是否有效或重试');
       } else {
         console.warn('[EduProxy] 最终 URL 未到达教务系统，但继续尝试...');
       }
 
+      /* 验证 cookie 数量 - 如果只有 2 个（SSO cookie），说明没有获得教务系统 session */
+      const cookieCount = Object.keys(this.cookieJar).length;
+      if (cookieCount <= 2) {
+        console.warn(`[EduProxy] cookie 数量异常 (${cookieCount} 个)，可能登录未成功`);
+      }
+
       this.loggedIn = true;
       this.cookies = this._cookieList();
-      console.log(`[EduProxy] 登录成功！共收集 ${Object.keys(this.cookieJar).length} 个 cookies`);
+      console.log(`[EduProxy] 登录完成！共收集 ${cookieCount} 个 cookies`);
 
       /* 构建 axios 实例 */
       this._buildAxiosInstance();
@@ -473,21 +516,52 @@ class EduProxy {
     try {
       console.log('[EduProxy] 正在获取学生信息...');
 
-      /* 方法1：从课表 API 获取参数 */
+      /*
+       * 方法0：从首页 HTML 中提取学生信息和学期信息
+       * 首页通常包含当前学期信息和学生基本信息
+       */
       try {
-        const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
-          params: { semesterId: this.semesterId || '' },
-        });
-        const data = res.data;
-        if (data && data.id) {
-          this.studentId = data.id;
+        const homeRes = await this.axiosInstance.get('/student/home');
+        const homeHtml = homeRes.data || '';
+        const $ = require('cheerio').load(homeHtml);
+
+        /* 尝试从页面脚本中提取 studentId */
+        const scripts = $('script').text();
+        const idMatch = scripts.match(/studentId['":\s]+(\d+)/);
+        if (idMatch) this.studentId = parseInt(idMatch[1]);
+
+        const semMatch = scripts.match(/semesterId['":\s]+(\d+)/);
+        if (semMatch) this.semesterId = parseInt(semMatch[1]);
+
+        /* 尝试从页面链接中提取 semesterId */
+        if (!this.semesterId) {
+          const semLinkMatch = homeHtml.match(/semester\/(\d+)/);
+          if (semLinkMatch) this.semesterId = parseInt(semLinkMatch[1]);
         }
-        if (data && data.semester && data.semester.id) {
-          this.semesterId = data.semester.id;
-          this.semesterName = data.semester.nameZh || '';
-        }
+
+        console.log(`[EduProxy] 首页提取: studentId=${this.studentId}, semesterId=${this.semesterId}`);
       } catch (e) {
-        console.warn('[EduProxy] 通过课表 API 获取学生信息失败:', e.message);
+        console.warn('[EduProxy] 从首页获取学生信息失败:', e.message);
+      }
+
+      /* 方法1：从课表 API 获取参数 */
+      if (!this.studentId || !this.semesterId) {
+        try {
+          const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
+            params: { semesterId: this.semesterId || '' },
+          });
+          const data = res.data;
+          if (data && data.id && !this.studentId) {
+            this.studentId = data.id;
+          }
+          if (data && data.semester && data.semester.id && !this.semesterId) {
+            this.semesterId = data.semester.id;
+            this.semesterName = data.semester.nameZh || '';
+          }
+          console.log(`[EduProxy] 课表API提取: studentId=${this.studentId}, semesterId=${this.semesterId}`);
+        } catch (e) {
+          console.warn('[EduProxy] 通过课表 API 获取学生信息失败:', e.message);
+        }
       }
 
       /* 方法2：从课表页面重定向 URL 获取 semesterId */
