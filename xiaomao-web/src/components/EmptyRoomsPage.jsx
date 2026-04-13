@@ -12,10 +12,10 @@ import {
 const PERIODS = {}
 for (let i = 1; i <= 14; i++) PERIODS[i] = `第${i}节`
 const PERIOD_TIMES = {
-  1: '08:00-08:45', 2: '08:55-09:40', 3: '10:00-10:45', 4: '10:55-11:40',
-  5: '11:50-12:35', 6: '13:00-13:45', 7: '13:55-14:40', 8: '14:50-15:35',
-  9: '15:45-16:30', 10: '16:40-17:25', 11: '18:00-18:45', 12: '18:55-19:40',
-  13: '19:50-20:35', 14: '20:45-21:30',
+  1: '08:15-08:55', 2: '09:00-09:40', 3: '09:55-10:35', 4: '10:40-11:20',
+  5: '11:25-12:05', 6: '13:00-13:40', 7: '13:45-14:25', 8: '14:40-15:20',
+  9: '15:25-16:05', 10: '16:10-16:50', 11: '18:00-18:40', 12: '18:45-19:25',
+  13: '19:40-20:20', 14: '20:25-21:05',
 }
 
 function getWeekday(d) {
@@ -57,14 +57,26 @@ function useRoomData() {
 /* ========== 表格总览 ========== */
 function OverviewTab({ data, buildings, dates, getEmpty }) {
   const [date, setDate] = useState('')
-  const [period, setPeriod] = useState(1)
+  const [period, setPeriod] = useState(null)
   const [showFreeOnly, setShowFreeOnly] = useState(false)
 
-  // 初始化日期
+  // 根据当前时间计算当前节次
+  const getCurrentPeriod = () => {
+    const now = new Date()
+    const mins = now.getHours() * 60 + now.getMinutes()
+    const starts = [495,540,595,640,685,780,825,880,925,970,1080,1125,1180,1225] // 每节开始分钟数
+    for (let i = starts.length - 1; i >= 0; i--) {
+      if (mins >= starts[i]) return i + 1
+    }
+    return 1
+  }
+
+  // 初始化日期和节次
   useEffect(() => {
     if (dates.length === 0) return
     const today = getToday()
     setDate(dates.includes(today) ? today : dates[0])
+    setPeriod(getCurrentPeriod())
   }, [dates])
 
   const stats = useMemo(() => {

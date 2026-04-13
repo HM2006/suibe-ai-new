@@ -3,7 +3,7 @@
    Canvas校园地图 + 点击记录停车位置
    ======================================== */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Car, Trash2 } from 'lucide-react'
+import { Car, Trash2, Pencil, Check } from 'lucide-react'
 
 // 地图区块比例布局 (0-100 相对坐标)
 const LAYOUT = {
@@ -60,6 +60,7 @@ function ParkPage() {
   const containerRef = useRef(null)
   const [marker, setMarker] = useState(null)
   const [animating, setAnimating] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   // 加载缓存
   useEffect(() => {
@@ -147,6 +148,7 @@ function ParkPage() {
   // 点击事件
   const handlePointerDown = (e) => {
     e.preventDefault()
+    if (!editing) return
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -165,6 +167,7 @@ function ParkPage() {
     const newMarker = { x: relX, y: relY, text: locName, time: timeStr }
     setMarker(newMarker)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newMarker))
+    setEditing(false)
     setAnimating(true)
     setTimeout(() => setAnimating(false), 600)
     if (navigator.vibrate) navigator.vibrate(40)
@@ -203,9 +206,43 @@ function ParkPage() {
       }}>
         <canvas
           ref={canvasRef}
-          style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none' }}
+          style={{ display: 'block', width: '100%', height: '100%', cursor: editing ? 'crosshair' : 'default', touchAction: 'none', opacity: editing ? 1 : 0.85 }}
           onPointerDown={handlePointerDown}
         />
+        {!editing && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(255,255,255,0.3)', borderRadius: '12px',
+            pointerEvents: 'none',
+          }}>
+            <span style={{ fontSize: '13px', color: '#666', background: 'rgba(255,255,255,0.8)', padding: '6px 14px', borderRadius: '8px' }}>
+              点击下方「编辑位置」修改
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 操作按钮 */}
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
+        {!editing ? (
+          <button onClick={() => setEditing(true)} style={{
+            padding: '8px 20px', borderRadius: '10px', border: 'none',
+            background: 'var(--primary)', color: '#fff', fontSize: '13px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500,
+            boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
+          }}>
+            <Pencil size={14} /> 编辑位置
+          </button>
+        ) : (
+          <button onClick={() => setEditing(false)} style={{
+            padding: '8px 20px', borderRadius: '10px', border: 'none',
+            background: '#059669', color: '#fff', fontSize: '13px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500,
+          }}>
+            <Check size={14} /> 完成
+          </button>
+        )}
       </div>
 
       {/* 结果展示 */}
