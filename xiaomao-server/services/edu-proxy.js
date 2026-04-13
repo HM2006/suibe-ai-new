@@ -1,25 +1,48 @@
 /**
- * 教务系统代理服务（修复版）
+ * 教务系统代理服务（纯 HTTP 版）
  *
- * 修复内容：
- * 1. 优化页面等待策略，避免 networkidle2 过于严格
- * 2. 增强错误日志，便于调试
- * 3. 添加超时保护，避免流程卡住
- * 4. 简化等待逻辑，提高稳定性
+ * 完全移除 Puppeteer 依赖，所有功能通过 HTTP 请求实现：
+ * 1. 登录：通过 HTTP 跟随 SSO 重定向链 → 获取二维码 → 轮询扫码状态 → 提交登录
+ * 2. 课表/成绩：通过 axios + cookie 调用后端 API
+ * 3. 资源占用极低，无需 Chrome/Chromium
+ *
+ * 认证流程（纯 HTTP）：
+ * 1. GET /student/sso/login → 302 到 authserver（获取 session cookie）
+ * 2. GET /authserver/login?service=... → 200（获取 JSESSIONID + lt ticket）
+ * 3. GET /authserver/qrCode/get → UUID
+ * 4. GET /authserver/qrCode/code?uuid=UUID → 二维码 PNG 图片
+ * 5. 轮询 GET /authserver/qrCode/status?uuid=UUID → "0"(等待)/"1"(确认)/"2"(已扫)/"3"(失效)
+ * 6. POST /authserver/login (lt + dllt=qrLogin + uuid) → 302 重定向链 → 最终 cookie
  */
 
-const puppeteer = require('puppeteer');
+const axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 const cheerio = require('cheerio');
 
 // ==================== 常量配置 ====================
-const EDU_LOGIN_URL = 'https://nbkjw.suibe.edu.cn/student/login?refer=https://nbkjw.suibe.edu.cn/student/home';
-const EDU_HOME_URL = 'https://nbkjw.suibe.edu.cn/student/home';
-const AUTH_HOST = 'authserver.suibe.edu.cn';
 const EDU_HOST = 'nbkjw.suibe.edu.cn';
+const EDU_BASE_URL = `https://${EDU_HOST}`;
+const AUTH_HOST = 'authserver.suibe.edu.cn';
+const AUTH_BASE_URL = `https://${AUTH_HOST}`;
 
-const NAVIGATION_TIMEOUT = 30000;
-const LOGIN_TIMEOUT = 120000;
-const PAGE_LOAD_WAIT = 5000;
+const SSO_SERVICE_URL = `${EDU_BASE_URL}/student/sso/login`;
+const AUTH_LOGIN_URL = `${AUTH_BASE_URL}/authserver/login`;
+const QR_CODE_GET_URL = `${AUTH_BASE_URL}/authserver/qrCode/get`;
+const QR_CODE_IMG_URL = `${AUTH_BASE_URL}/authserver/qrCode/code`;
+const QR_CODE_STATUS_URL = `${AUTH_BASE_URL}/authserver/qrCode/status`;
+
+const LOGIN_TIMEOUT = 120000; // 扫码等待超时 2 分钟
+const QR_POLL_INTERVAL = 2000; // 轮询间隔 2 秒
+
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+/* 代理配置：自动检测环境变量中的 HTTP_PROXY / HTTPS_PROXY */
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || null;
+const PROXY_AGENT = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
+
+if (PROXY_URL) {
+  console.log(`[EduProxy] 检测到代理: ${PROXY_URL}`);
+}
 
 // ==================== 单例模式 ====================
 let instance = null;
@@ -29,12 +52,19 @@ class EduProxy {
     if (instance) {
       throw new Error('EduProxy 是单例类，请使用 EduProxy.getInstance() 获取实例');
     }
-    this.browser = null;
-    this.page = null;
-    this.initialized = false;
     this.loggedIn = false;
-    this.cookies = [];
-    this.currentUrl = '';
+    this.cookies = [];           // 原始 cookie 对象列表 [{name, value, domain, ...}]
+    this.cookieJar = {};         // 快速查找: { "cookieName": "cookieValue" }
+    /* 认证相关状态 */
+    this.qrUuid = null;
+    this.ltTicket = null;
+    this.authSessionId = null;   // authserver 的 JSESSIONID
+    /* API 相关参数 - 登录后自动获取 */
+    this.studentId = null;
+    this.semesterId = null;
+    this.semesterName = '';
+    /* axios 实例（带 cookie，用于教务系统 API） */
+    this.axiosInstance = null;
   }
 
   static getInstance() {
@@ -46,207 +76,210 @@ class EduProxy {
 
   static resetInstance() {
     if (instance) {
-      instance.close().catch(() => {});
+      instance.close();
       instance = null;
     }
   }
 
-  // ==================== 浏览器生命周期 ====================
-  async init() {
-    if (this.initialized && this.browser) {
-      console.log('[EduProxy] 浏览器已初始化，跳过重复启动');
-      return;
-    }
-    try {
-      console.log('[EduProxy] 正在启动 headless 浏览器...');
-      const launchArgs = {
-        headless: 'new',
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-extensions',
-          '--window-size=1280,800'
-        ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      };
-      this.browser = await puppeteer.launch(launchArgs);
-      this.page = await this.browser.newPage();
-      await this.page.setViewport({ width: 1280, height: 800 });
-      this.page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
-      await this.page.setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      );
-      this.initialized = true;
-      console.log('[EduProxy] 浏览器启动成功');
-    } catch (error) {
-      console.error('[EduProxy] 浏览器启动失败:', error.message);
-      this.initialized = false;
-      this.browser = null;
-      this.page = null;
-      throw new Error(`浏览器启动失败: ${error.message}`);
-    }
+  // ==================== 生命周期 ====================
+
+  close() {
+    this.loggedIn = false;
+    this.cookies = [];
+    this.cookieJar = {};
+    this.qrUuid = null;
+    this.ltTicket = null;
+    this.authSessionId = null;
+    this.studentId = null;
+    this.semesterId = null;
+    this.axiosInstance = null;
+    console.log('[EduProxy] 实例已重置');
   }
 
-  async ensureInitialized() {
-    if (!this.initialized || !this.browser) {
-      await this.init();
-    }
-    try {
-      if (this.browser && !this.browser.connected) {
-        console.log('[EduProxy] 浏览器连接已断开，重新初始化...');
-        this.initialized = false;
-        await this.init();
+  // ==================== Cookie 管理 ====================
+
+  /**
+   * 从 axios 响应中提取 set-cookie 并合并到 cookieJar
+   */
+  _mergeCookies(response) {
+    const setCookies = response.headers?.['set-cookie'] || [];
+    for (const raw of setCookies) {
+      const eqIdx = raw.indexOf('=');
+      if (eqIdx === -1) continue;
+      const semiIdx = raw.indexOf(';');
+      const name = raw.substring(0, eqIdx).trim();
+      const value = raw.substring(eqIdx + 1, semiIdx > eqIdx ? semiIdx : undefined).trim();
+      if (name && value) {
+        this.cookieJar[name] = value;
       }
-    } catch {
-      this.initialized = false;
-      await this.init();
     }
   }
 
-  async close() {
-    try {
-      if (this.browser) {
-        await this.browser.close();
-        console.log('[EduProxy] 浏览器已关闭');
-      }
-    } catch (error) {
-      console.warn('[EduProxy] 关闭浏览器时出错:', error.message);
-    } finally {
-      this.browser = null;
-      this.page = null;
-      this.initialized = false;
-      this.loggedIn = false;
-      this.cookies = [];
-      this.currentUrl = '';
+  /**
+   * 创建带 cookie 捕获功能的 axios 请求配置
+   * 使用 beforeRedirect 回调在每次重定向时捕获 set-cookie
+   */
+  _cookieCaptureConfig(extraHeaders = {}) {
+    const config = {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Cookie': this._cookieString(),
+        ...extraHeaders,
+      },
+      maxRedirects: 10,
+      timeout: 15000,
+      /* 禁用 axios 内置 proxy（避免明文 HTTP 发到 HTTPS 端口） */
+      proxy: false,
+      beforeRedirect: (options, { responseHeaders }) => {
+        const setCookies = responseHeaders?.['set-cookie'] || [];
+        for (const raw of setCookies) {
+          const eqIdx = raw.indexOf('=');
+          if (eqIdx === -1) continue;
+          const semiIdx = raw.indexOf(';');
+          const name = raw.substring(0, eqIdx).trim();
+          const value = raw.substring(eqIdx + 1, semiIdx > eqIdx ? semiIdx : undefined).trim();
+          if (name && value) {
+            this.cookieJar[name] = value;
+          }
+        }
+        /* 更新下一次请求的 Cookie 头 */
+        options.headers = options.headers || {};
+        options.headers['Cookie'] = this._cookieString();
+      },
+    };
+    /* 使用 CONNECT 隧道代理 */
+    if (PROXY_AGENT) {
+      config.httpsAgent = PROXY_AGENT;
     }
+    return config;
   }
 
-  // ==================== 登录流程 ====================
+  /**
+   * 将 cookieJar 转为 Cookie 头字符串
+   */
+  _cookieString() {
+    return Object.entries(this.cookieJar)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+  }
+
+  /**
+   * 将 cookieJar 转为 puppeteer 格式的 cookie 列表（兼容前端缓存）
+   */
+  _cookieList() {
+    return Object.entries(this.cookieJar).map(([name, value]) => ({
+      name,
+      value,
+      domain: EDU_HOST,
+      path: '/',
+    }));
+  }
+
+  // ==================== 登录流程（纯 HTTP） ====================
+
+  /**
+   * 获取登录二维码
+   *
+   * 流程：
+   * 1. GET /student/sso/login → 跟随 302 到 authserver，收集 cookie
+   * 2. GET /authserver/login?service=... → 获取 JSESSIONID + lt ticket
+   * 3. GET /authserver/qrCode/get → 获取二维码 UUID
+   * 4. GET /authserver/qrCode/code?uuid=UUID → 获取二维码图片
+   */
   async getLoginQRCode() {
-    await this.ensureInitialized();
     try {
-      console.log('[EduProxy] 步骤1：打开教务系统登录页面...');
-      await this.page.goto(EDU_LOGIN_URL, {
-        waitUntil: 'load',
-        timeout: NAVIGATION_TIMEOUT
-      });
-      console.log('[EduProxy] 步骤1完成：登录页面已加载');
-      await this._delay(1000);
+      console.log('[EduProxy] 步骤1：访问 SSO 入口，跟随重定向到认证服务器...');
 
-      console.log('[EduProxy] 步骤2：查找SSO登录按钮...');
-      const ssoButtonSelectors = [
-        'a[href*="authserver"]',
-        'button:contains("统一身份认证")',
-        'a:contains("统一身份认证")',
-        '.login-btn',
-        'a[href*="cas"]',
-      ];
+      /*
+       * 步骤1：GET /student/sso/login
+       * 让 axios 自动跟随 302 重定向到 authserver，同时收集 cookie
+       */
+      const serviceParam = encodeURIComponent(SSO_SERVICE_URL);
+      const ssoResponse = await axios.get(SSO_SERVICE_URL, this._cookieCaptureConfig({
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      }));
 
-      let clicked = false;
-      for (const selector of ssoButtonSelectors) {
-        try {
-          const found = await this.page.evaluate((sel) => {
-            const links = document.querySelectorAll('a, button');
-            for (const link of links) {
-              const text = link.textContent || '';
-              const href = link.href || '';
-              if (
-                text.includes('统一身份认证') ||
-                text.includes('身份认证') ||
-                href.includes('authserver') ||
-                href.includes('cas')
-              ) {
-                link.click();
-                return true;
-              }
-            }
-            return false;
-          }, selector);
-          if (found) {
-            clicked = true;
-            console.log('[EduProxy] 步骤2完成：已点击SSO登录按钮');
-            break;
-          }
-        } catch (e) {
-          console.log(`[EduProxy] 选择器 "${selector}" 未找到，继续尝试下一个...`);
-        }
-      }
+      this._mergeCookies(ssoResponse);
+      console.log(`[EduProxy] 步骤1完成：SSO cookie 已获取 (${Object.keys(this.cookieJar).length} 个)`);
 
-      if (!clicked) {
-        console.log('[EduProxy] 步骤2备选：未找到SSO按钮，尝试直接访问认证页面');
-      }
-
-      console.log('[EduProxy] 步骤3：等待跳转到统一身份认证平台...');
-      try {
-        await this.page.waitForFunction(
-          () => window.location.hostname.includes('authserver'),
-          { timeout: 10000 }
-        );
-      } catch (e) {
-        const currentUrl = this.page.url();
-        if (!currentUrl.includes('authserver')) {
-          throw new Error(`无法跳转到统一身份认证平台。当前URL: ${currentUrl}`);
-        }
-      }
-      console.log('[EduProxy] 步骤3完成：已跳转到认证页面');
-      await this._delay(2000);
-
-      console.log('[EduProxy] 步骤4：等待认证页面完全加载...');
-      await this.page.waitForFunction(
-        () => {
-          return document.readyState === 'complete' &&
-                 document.body &&
-                 document.body.innerHTML.length > 1000;
-        },
-        { timeout: 10000 }
+      /*
+       * 步骤2：GET /authserver/login?service=...
+       * 获取认证页面，提取 JSESSIONID 和 lt ticket
+       */
+      console.log('[EduProxy] 步骤2：访问认证服务器登录页面...');
+      const authResponse = await axios.get(
+        `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+        this._cookieCaptureConfig({
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Referer': EDU_BASE_URL,
+        })
       );
-      console.log('[EduProxy] 步骤4完成：认证页面已完全加载');
 
-      console.log('[EduProxy] 步骤5：只截取二维码区域...');
-      // 尝试找到二维码图片元素并截取
-      let qrCodeImage;
-      try {
-        // 方法1：查找二维码img元素
-        const qrElement = await this.page.$('img[src*="qrcode"], img[src*="qr"], .qrcode img, #qrcode img, .qr-code img');
-        if (qrElement) {
-          qrCodeImage = await qrElement.screenshot({ type: 'png', encoding: 'base64' });
-          console.log('[EduProxy] 步骤5完成：通过元素选择器截取二维码');
-        } else {
-          // 方法2：查找包含二维码的容器（通常是特定class或id）
-          const qrContainer = await this.page.$('.qrcode, #qrcode, .qr-code, .wx-qr, .wechat-qr, [class*="qrcode"], [class*="qr-code"]');
-          if (qrContainer) {
-            qrCodeImage = await qrContainer.screenshot({ type: 'png', encoding: 'base64' });
-            console.log('[EduProxy] 步骤5完成：通过容器选择器截取二维码');
-          } else {
-            // 方法3：截取整个页面中间区域（二维码通常在页面中央）
-            const viewport = this.page.viewport();
-            const clip = {
-              x: Math.floor(viewport.width * 0.2),
-              y: Math.floor(viewport.height * 0.15),
-              width: Math.floor(viewport.width * 0.6),
-              height: Math.floor(viewport.height * 0.6),
-            };
-            qrCodeImage = await this.page.screenshot({
-              type: 'png',
-              encoding: 'base64',
-              clip
-            });
-            console.log('[EduProxy] 步骤5完成：通过区域裁剪截取二维码');
-          }
-        }
-      } catch (screenshotErr) {
-        console.warn('[EduProxy] 元素截图失败，使用全页截图:', screenshotErr.message);
-        qrCodeImage = await this.page.screenshot({ type: 'png', fullPage: true, encoding: 'base64' });
+      this._mergeCookies(authResponse);
+      this.authSessionId = this.cookieJar['JSESSIONID'] || null;
+      console.log(`[EduProxy] 步骤2完成：JSESSIONID=${this.authSessionId ? '已获取' : '未获取'}`);
+
+      /* 从 HTML 中提取 lt ticket */
+      const html = authResponse.data || '';
+      const ltMatch = html.match(/name="lt"\s+value="([^"]+)"/);
+      if (!ltMatch) {
+        throw new Error('无法从认证页面提取 lt ticket，页面结构可能已变更');
       }
-      this.currentUrl = this.page.url();
-      console.log('[EduProxy] 步骤5完成：二维码截图获取成功');
-      console.log(`[EduProxy] 当前认证页面URL: ${this.currentUrl}`);
+      this.ltTicket = ltMatch[1];
+      console.log(`[EduProxy] lt ticket: ${this.ltTicket}`);
+
+      /*
+       * 步骤3：GET /authserver/qrCode/get → 获取二维码 UUID
+       */
+      console.log('[EduProxy] 步骤3：获取二维码 UUID...');
+      const uuidResponse = await axios.get(QR_CODE_GET_URL, {
+        params: { ts: Date.now() },
+        proxy: false,
+        ...(PROXY_AGENT ? { httpsAgent: PROXY_AGENT } : {}),
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': '*/*',
+          'Cookie': this._cookieString(),
+          'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        timeout: 10000,
+      });
+
+      this.qrUuid = typeof uuidResponse.data === 'string'
+        ? uuidResponse.data.trim()
+        : String(uuidResponse.data).trim();
+
+      if (!this.qrUuid || !this.qrUuid.startsWith('QR-')) {
+        throw new Error(`获取二维码 UUID 失败: ${this.qrUuid}`);
+      }
+      console.log(`[EduProxy] 步骤3完成：UUID=${this.qrUuid}`);
+
+      /*
+       * 步骤4：GET /authserver/qrCode/code?uuid=UUID → 获取二维码图片
+       */
+      console.log('[EduProxy] 步骤4：下载二维码图片...');
+      const imgResponse = await axios.get(QR_CODE_IMG_URL, {
+        params: { uuid: this.qrUuid },
+        proxy: false,
+        ...(PROXY_AGENT ? { httpsAgent: PROXY_AGENT } : {}),
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'image/png,image/*',
+          'Cookie': this._cookieString(),
+          'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+        },
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      });
+
+      /* 将 PNG 图片转为 base64 */
+      const qrCodeImage = Buffer.from(imgResponse.data, 'binary').toString('base64');
+      console.log(`[EduProxy] 步骤4完成：二维码图片大小 ${qrCodeImage.length} 字符 (base64)`);
+
       return {
         qrCodeImage,
-        loginUrl: this.currentUrl
+        loginUrl: `${AUTH_LOGIN_URL}?service=${serviceParam}`,
       };
     } catch (error) {
       console.error('[EduProxy] 获取登录二维码失败:', error.message);
@@ -255,228 +288,296 @@ class EduProxy {
     }
   }
 
-  async waitForLogin(timeout = LOGIN_TIMEOUT) {
-    if (!this.page) {
-      throw new Error('浏览器未初始化');
-    }
+  /**
+   * 检查登录状态（单次轮询）
+   * 返回: { loggedIn: boolean, message?: string }
+   */
+  async checkLoginStatus() {
     if (this.loggedIn) {
-      return { success: true, cookies: this.cookies };
+      return true;
     }
-    console.log(`[EduProxy] 等待用户扫码登录，超时时间: ${timeout}ms...`);
+    return false;
+  }
+
+  /**
+   * 等待用户扫码登录
+   *
+   * 流程：
+   * 1. 轮询 /authserver/qrCode/status?uuid=xxx
+   * 2. 状态为 "1" 时，POST /authserver/login 提交登录
+   * 3. 跟随 302 重定向链，收集最终 cookie
+   * 4. 构建 axios 实例，获取学生信息
+   */
+  async waitForLogin(timeout = LOGIN_TIMEOUT) {
+    if (this.loggedIn) {
+      return { success: true, cookies: this._cookieList() };
+    }
+
+    if (!this.qrUuid || !this.ltTicket) {
+      return { success: false, message: '二维码未初始化，请先获取二维码' };
+    }
+
+    const serviceParam = encodeURIComponent(SSO_SERVICE_URL);
+    const startTime = Date.now();
+    console.log(`[EduProxy] 开始轮询扫码状态，超时: ${timeout}ms...`);
+
     try {
-      await this.page.waitForFunction(
-        () => window.location.hostname.includes('nbkjw'),
-        { timeout }
-      );
-      await this._delay(2000);
-      const finalUrl = this.page.url();
-      if (!finalUrl.includes(EDU_HOST)) {
-        throw new Error('登录未完成，页面未跳转回教务系统');
+      /* 轮询扫码状态 */
+      while (Date.now() - startTime < timeout) {
+        try {
+          const statusResponse = await axios.get(QR_CODE_STATUS_URL, {
+            params: { ts: Date.now(), uuid: this.qrUuid },
+            proxy: false,
+            ...(PROXY_AGENT ? { httpsAgent: PROXY_AGENT } : {}),
+            headers: {
+              'User-Agent': USER_AGENT,
+              'Accept': '*/*',
+              'Cookie': this._cookieString(),
+              'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            timeout: 5000,
+          });
+
+          const status = String(statusResponse.data).trim();
+          console.log(`[EduProxy] 扫码状态: ${status} (${new Date().toISOString()})`);
+
+          if (status === '1') {
+            /* 用户已确认登录，提交登录表单 */
+            console.log('[EduProxy] 用户已确认登录，提交登录表单...');
+            await this._submitLoginForm(serviceParam);
+            break;
+          } else if (status === '2') {
+            /* 已扫描，等待确认 */
+            console.log('[EduProxy] 二维码已扫描，等待用户确认...');
+          } else if (status === '3') {
+            /* 二维码已失效 */
+            return { success: false, message: '二维码已失效，请刷新重新获取' };
+          }
+          /* status === '0' 或其他：继续等待 */
+        } catch (pollErr) {
+          console.warn('[EduProxy] 轮询请求失败:', pollErr.message);
+        }
+
+        await this._delay(QR_POLL_INTERVAL);
       }
-      this.cookies = await this.page.cookies();
-      this.currentUrl = finalUrl;
-      this.loggedIn = true;
-      console.log('[EduProxy] 登录成功！');
-      console.log(`[EduProxy] 已保存 ${this.cookies.length} 个 cookies`);
-      return {
-        success: true,
-        cookies: this.cookies
-      };
-    } catch (error) {
-      if (error.message.includes('waiting')) {
-        console.log('[EduProxy] 等待登录超时');
+
+      /* 检查是否超时 */
+      if (!this.loggedIn) {
         return { success: false, message: '等待登录超时，请重新扫码' };
       }
+
+      return { success: true, cookies: this._cookieList() };
+    } catch (error) {
       console.error('[EduProxy] 等待登录失败:', error.message);
       return { success: false, message: error.message };
     }
   }
 
-  async checkLoginStatus() {
-    if (!this.loggedIn || !this.page) {
-      return false;
-    }
+  /**
+   * 提交二维码登录表单并跟随重定向链
+   */
+  async _submitLoginForm(serviceParam) {
     try {
-      // loggedIn 标志在 waitForLogin 中设置，直接信任即可
-      // 不再检查 URL（登录后页面可能在 authserver 域名下）
-      return true;
-    } catch {
-      return false;
+      /*
+       * POST /authserver/login
+       * 表单参数: lt={ticket}&dllt=qrLogin&uuid={uuid}
+       * 让 axios 自动跟随重定向链收集 cookie
+       */
+      const loginResponse = await axios.post(
+        `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+        new URLSearchParams({
+          lt: this.ltTicket,
+          dllt: 'qrLogin',
+          uuid: this.qrUuid,
+        }).toString(),
+        this._cookieCaptureConfig({
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        })
+      );
+
+      this._mergeCookies(loginResponse);
+
+      /* 检查最终 URL 是否到达教务系统 */
+      const finalUrl = loginResponse.request?.res?.responseUrl || loginResponse.config?.url || '';
+      console.log(`[EduProxy] 登录重定向完成，最终 URL: ${finalUrl}`);
+
+      if (finalUrl.includes(EDU_HOST) || loginResponse.data?.includes?.(EDU_HOST)) {
+        console.log('[EduProxy] 已成功重定向回教务系统');
+      } else {
+        console.warn('[EduProxy] 最终 URL 未到达教务系统，但继续尝试...');
+      }
+
+      this.loggedIn = true;
+      this.cookies = this._cookieList();
+      console.log(`[EduProxy] 登录成功！共收集 ${Object.keys(this.cookieJar).length} 个 cookies`);
+
+      /* 构建 axios 实例 */
+      this._buildAxiosInstance();
+
+      /* 获取学生 ID 和当前学期 ID */
+      await this._fetchStudentInfo();
+
+    } catch (error) {
+      console.error('[EduProxy] 提交登录表单失败:', error.message);
+      throw new Error(`登录提交失败: ${error.message}`);
     }
   }
 
-  // ==================== 课表查询 ====================
-  async getSchedule() {
-    await this._ensureLoggedIn();
-    try {
-      console.log('[EduProxy] 正在获取课表...');
-      const scheduleUrl = 'https://nbkjw.suibe.edu.cn/student/for-std/course-table';
-      console.log(`[EduProxy] 访问课表页面: ${scheduleUrl}`);
-      await this.page.goto(scheduleUrl, {
-        waitUntil: 'load',
-        timeout: NAVIGATION_TIMEOUT
-      });
-      /* 等待课表数据加载完成（AJAX动态渲染） */
-      await this._delay(PAGE_LOAD_WAIT);
-      /* 等待表格出现 */
-      try {
-        await this.page.waitForSelector('table', { timeout: 10000 });
-      } catch (e) {
-        console.log('[EduProxy] 等待表格超时，尝试继续解析...');
-      }
-      const html = await this.page.content();
-      if (!html) {
-        throw new Error('课表页面内容为空');
-      }
-      const $ = cheerio.load(html);
+  // ==================== Cookie / Axios 工具 ====================
 
-      /*
-       * 真实课表HTML结构（通过浏览器实际查看确认）：
-       * - table布局，列头：节次、星期一~星期日
-       * - 每行对应一个节次（1-14），每列对应一天
-       * - 课程cell格式：课程名 课程代码 (周次) (节次) 校区 教室 教师 人数:选课/容量
-       * - 例如："（选）管理学 A230510096020-003 (1~16周) (1-2节)  松江 SA201  杨浩 人数:62/60"
-       *
-       * 重要发现：
-       * 1. 同一门课可能跨多行（如数据结构基础在3-4节和5节各出现一次）
-       * 2. 同一节次同一列可能有多个课程（如6-7节有4门课）
-       * 3. 需要用课程代码去重，避免同一门课被重复添加
-       * 4. slot应使用解析出的起始节次，而非当前行号
-       */
-      const rows = $('table tr');
-      const dayMap = {}; // 按星期几分组
-      const courseCodeSet = {}; // 用于去重：key = "dayIndex-courseCode"
+  /**
+   * 构建 axios 实例（用于教务系统 API 调用）
+   */
+  _buildAxiosInstance() {
+    const config = {
+      baseURL: EDU_BASE_URL,
+      timeout: 15000,
+      proxy: false, // 禁用 axios 内置 proxy
+      headers: {
+        'Cookie': this._cookieString(),
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': `${EDU_BASE_URL}/student/home`,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    };
+    if (PROXY_AGENT) {
+      config.httpsAgent = PROXY_AGENT;
+    }
+    this.axiosInstance = axios.create(config);
 
-      rows.each((rowIndex, rowEl) => {
-        const cells = $(rowEl).find('td');
-        if (cells.length < 2) return;
-
-        /* 第一列是节次号 */
-        const periodText = $(cells[0]).text().trim();
-        const periodNum = parseInt(periodText);
-        if (isNaN(periodNum)) return; // 跳过表头行
-
-        /* 遍历每个星期列（第2~8列对应周一~周日） */
-        for (let colIndex = 1; colIndex < cells.length && colIndex <= 7; colIndex++) {
-          const cellText = $(cells[colIndex]).text().trim();
-          if (!cellText || cellText === periodText) continue;
-
-          /* 解析课程信息 */
-          const course = this._parseScheduleCell(cellText, periodNum, colIndex);
-          if (course) {
-            const dayKey = colIndex - 1; // 0=周一, 1=周二...
-
-            /* 用课程代码+星期去重，避免同一门课跨多行时重复添加 */
-            const dedupeKey = course.code ? `${dayKey}-${course.code}` : `${dayKey}-${course.name}-${course.time}`;
-            if (courseCodeSet[dedupeKey]) continue;
-            courseCodeSet[dedupeKey] = true;
-
-            if (!dayMap[dayKey]) dayMap[dayKey] = [];
-            dayMap[dayKey].push(course);
-          }
+    /* 响应拦截器：检测登录过期 */
+    this.axiosInstance.interceptors.response.use(
+      res => res,
+      err => {
+        if (err.response && (err.response.status === 302 || err.response.status === 401)) {
+          console.log('[EduProxy] API 请求返回未授权，标记为未登录');
+          this.loggedIn = false;
         }
-      });
+        return Promise.reject(err);
+      }
+    );
 
-      /* 转换为前端期望的格式 */
-      const scheduleData = {};
-      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      for (let d = 0; d < 7; d++) {
-        scheduleData[d] = dayMap[d] || [];
+    console.log(`[EduProxy] axios 实例已创建，携带 ${Object.keys(this.cookieJar).length} 个 cookies`);
+  }
+
+  // ==================== 获取学生信息（API） ====================
+
+  /**
+   * 登录后获取 studentId 和当前 semesterId
+   */
+  async _fetchStudentInfo() {
+    try {
+      console.log('[EduProxy] 正在获取学生信息...');
+
+      /* 方法1：从课表 API 获取参数 */
+      try {
+        const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
+          params: { semesterId: this.semesterId || '' },
+        });
+        const data = res.data;
+        if (data && data.id) {
+          this.studentId = data.id;
+        }
+        if (data && data.semester && data.semester.id) {
+          this.semesterId = data.semester.id;
+          this.semesterName = data.semester.nameZh || '';
+        }
+      } catch (e) {
+        console.warn('[EduProxy] 通过课表 API 获取学生信息失败:', e.message);
       }
 
-      /* 提取MOOC课程信息（在"全部课程"tab中，备注字段包含MOOC信息） */
+      /* 方法2：从课表页面重定向 URL 获取 semesterId */
+      if (!this.semesterId) {
+        try {
+          const courseTableRes = await this.axiosInstance.get('/student/for-std/course-table', {
+            maxRedirects: 5,
+          });
+          const redirectUrl = courseTableRes.request?.res?.responseUrl || '';
+          const semMatch = redirectUrl.match(/semester\/(\d+)/);
+          if (semMatch) {
+            this.semesterId = parseInt(semMatch[1]);
+          }
+        } catch (e) {
+          /* 忽略 */
+        }
+      }
+
+      /* 方法3：通过成绩页面重定向获取 studentId */
+      if (!this.studentId) {
+        try {
+          const gradeRes = await this.axiosInstance.get('/student/for-std/grade/sheet', {
+            maxRedirects: 5,
+          });
+          const gradeUrl = gradeRes.request?.res?.responseUrl || '';
+          const gradeIdMatch = gradeUrl.match(/info\/(\d+)/);
+          if (gradeIdMatch) {
+            this.studentId = parseInt(gradeIdMatch[1]);
+          }
+        } catch (e) {
+          console.warn('[EduProxy] 通过成绩 API 获取 studentId 失败:', e.message);
+        }
+      }
+
+      console.log(`[EduProxy] 学生信息获取完成: studentId=${this.studentId}, semesterId=${this.semesterId}`);
+
+      if (!this.studentId) {
+        console.warn('[EduProxy] 未能自动获取 studentId，将在后续 API 调用中尝试获取');
+      }
+    } catch (error) {
+      console.error('[EduProxy] 获取学生信息失败:', error.message);
+    }
+  }
+
+  // ==================== 课表查询（API） ====================
+
+  async getSchedule() {
+    this._ensureApiReady();
+
+    try {
+      console.log('[EduProxy] 正在通过 API 获取课表...');
+
+      const params = {};
+      if (this.semesterId) params.semesterId = this.semesterId;
+
+      const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
+        params,
+        timeout: 15000,
+      });
+
+      const data = res.data;
+      if (!data) {
+        throw new Error('课表 API 返回空数据');
+      }
+
+      /* 从响应中更新 studentId 和 semesterId */
+      if (data.id && !this.studentId) {
+        this.studentId = data.id;
+      }
+      if (data.semester && data.semester.id && !this.semesterId) {
+        this.semesterId = data.semester.id;
+        this.semesterName = data.semester.nameZh || '';
+      }
+
+      /* 解析课表数据 */
+      const scheduleData = this._parseScheduleApiData(data);
+
+      /* 获取 MOOC 课程信息 */
       let moocCourses = [];
       try {
-        console.log('[EduProxy] 正在提取MOOC课程信息...');
-        /* 点击"全部课程"tab - 使用Puppeteer兼容的选择器 */
-        /* 尝试多种选择器匹配tab按钮 */
-        let allCourseTab = null;
-        const tabSelectors = [
-          'li[data-toggle="tab"] a',  // Bootstrap tab结构
-          'a[href*="all"]',
-          'ul.nav-tabs li:nth-child(2) a',
-          'ul.nav-tabs li:last-child a',
-        ];
-        for (const sel of tabSelectors) {
-          const el = await this.page.$(sel);
-          if (el) {
-            const text = await this.page.evaluate(e => e.textContent.trim(), el);
-            if (text.includes('全部课程')) {
-              allCourseTab = el;
-              break;
-            }
-          }
-        }
-        if (allCourseTab) {
-          await allCourseTab.click();
-          await this._delay(3000);
-
-          /* 从"全部课程"tab的HTML中提取含MOOC的课程信息 */
-          const allCourseHtml = await this.page.content();
-          const $all = cheerio.load(allCourseHtml);
-
-          /* 用正则从完整HTML中提取所有MOOC课程条目 */
-          /* 课程信息格式: 课程名（MOOC） 课程代码 ... 备注：... */
-          const moocPattern = /([\u4e00-\u9fa5（）：:、]+?（MOOC）)\s+[A-Z]\d{10,}[\w-]*\s+[^\n]*?备注[：:]\s*([^\n]+)/g;
-          const seen = new Set();
-          let moocMatch;
-
-          while ((moocMatch = moocPattern.exec(allCourseHtml)) !== null) {
-            const fullName = moocMatch[1].trim();
-            const remarkText = moocMatch[2].trim();
-
-            /* 去重 */
-            if (seen.has(fullName)) continue;
-            seen.add(fullName);
-
-            /* 提取课程名（去掉"（选）"和"（MOOC）"） */
-            let courseName = fullName.replace(/^（选）/, '').replace(/（MOOC）$/i, '').trim();
-            if (!courseName) continue;
-
-            /* 匹配平台 */
-            let platform = { name: '其他平台', url: '' };
-            const fullText = fullName + ' ' + remarkText;
-            if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) {
-              platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
-            } else if (fullText.includes('超星尔雅') || fullText.includes('超星')) {
-              platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
-            } else if (fullText.includes('智慧树')) {
-              platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
-            }
-
-            /* 提取备注链接 */
-            let remarkUrl = '';
-            const urlMatch = fullText.match(/(https?:\/\/[^\s"'<>)]+)/);
-            if (urlMatch) remarkUrl = urlMatch[1];
-
-            moocCourses.push({ name: courseName, platform: platform.name, platformUrl: platform.url, remarkUrl });
-          }
-
-          /* 切回课表tab */
-          let scheduleTab = null;
-          for (const sel of tabSelectors) {
-            const el = await this.page.$(sel);
-            if (el) {
-              const text = await this.page.evaluate(e => e.textContent.trim(), el);
-              if (text.includes('课表')) {
-                scheduleTab = el;
-                break;
-              }
-            }
-          }
-          if (scheduleTab) await scheduleTab.click();
-          await this._delay(1000);
-        }
+        moocCourses = await this._fetchMoocCourses();
       } catch (err) {
-        console.warn('[EduProxy] MOOC信息提取失败:', err.message);
+        console.warn('[EduProxy] MOOC 信息获取失败:', err.message);
       }
-      console.log(`[EduProxy] MOOC课程提取完成，发现 ${moocCourses.length} 门`);
 
       const now = new Date();
       let dayOfWeek = now.getDay();
       dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-      /* 统计总课程数 */
       let totalCourses = 0;
       Object.values(scheduleData).forEach(courses => totalCourses += courses.length);
 
@@ -495,77 +596,176 @@ class EduProxy {
   }
 
   /**
-   * 解析课表单元格文本
-   * 格式示例："（选）管理学 A230510096020-003 (1~16周) (1-2节)  松江 SA201  杨浩 人数:62/60"
-   * 特殊情况："形势与政策（4） A120310030051-006 (6周) (11-12节)  松江 SD3  刘一平 (8周) (11-12节)  松江 SD3 单泓睿 (10周) (11-12节)  松江 SD3 张毓格 人数:201/230"
+   * 解析课表 API 返回的 JSON 数据
    */
-  _parseScheduleCell(text, periodNum, dayIndex) {
-    /* 提取课程名（第一个词或括号内容，在课程代码之前） */
-    const nameMatch = text.match(/^(.+?)\s+[A-Z]\d{10,}/);
-    let name = nameMatch ? nameMatch[1].trim() : '';
-    if (!name) {
-      const parts = text.split(/\s+/);
-      name = parts[0] || '';
+  _parseScheduleApiData(data) {
+    const scheduleData = {};
+    for (let d = 0; d < 7; d++) {
+      scheduleData[d] = [];
     }
 
-    /* 提取课程代码 */
-    const codeMatch = text.match(/([A-Z]\d{10,}-\d{3})/);
-    const code = codeMatch ? codeMatch[1] : '';
+    const courseUnits = data.courseUnits || data.studentCourseUnits || [];
+    if (courseUnits.length === 0) {
+      console.warn('[EduProxy] courseUnits 为空，尝试其他数据字段...');
+    }
 
-    /* 提取周次 - 支持多种格式 */
-    const weekMatch = text.match(/\((\d+[~\-]?\d*周|\d+,\d+[~\-]?\d*周)\)/);
-    const weeks = weekMatch ? weekMatch[1] : '';
+    const courseCodeSet = {};
 
-    /* 提取节次 - 使用第一个出现的节次作为slot */
-    const slotMatch = text.match(/\((\d+)-(\d+)节\)/);
-    const time = slotMatch ? `${slotMatch[1]}-${slotMatch[2]}节` : `${periodNum}-${periodNum}节`;
-    /* slot使用解析出的起始节次（0-based），而非当前行号 */
-    const startSlot = slotMatch ? parseInt(slotMatch[1]) - 1 : periodNum - 1;
-    /* endSlot使用解析出的结束节次（0-based），用于前端跨行显示 */
-    const endSlot = slotMatch ? parseInt(slotMatch[2]) - 1 : periodNum - 1;
+    for (const unit of courseUnits) {
+      try {
+        const lesson = unit.lesson || {};
+        const time = unit.timeArrangement || unit.time || {};
+        const room = unit.room || {};
+        const teacher = unit.teacher || {};
+        const building = room.building || room.campus || {};
 
-    /* 提取教室（"松江 SA201" 格式） */
-    const locationMatch = text.match(/(松江|长宁|浦东)\s+(\S+)/);
-    const location = locationMatch ? `${locationMatch[1]} ${locationMatch[2]}` : '';
+        const nameZh = lesson.nameZh || '';
+        const codeObj = lesson.code || {};
+        const code = codeObj.code || '';
 
-    /* 提取教师（取第一个教师名，教室后面的第一个名字） */
-    const teacherMatch = text.match(/(?:松江|长宁|浦东)\s+\S+\s+(\S+)/);
-    let teacher = teacherMatch ? teacherMatch[1] : '';
-    /* 清理教师名中可能混入的"人数:xx/xx"后缀 */
-    teacher = teacher.replace(/人数[:：]?\d+\/\d+.*$/, '').trim();
+        const lessonKind = lesson.lessonKind || {};
+        const kindName = lessonKind.nameZh || '';
+        const isElective = kindName.includes('选') || nameZh.includes('（选）');
+        const type = isElective ? '选修' : '必修';
 
-    /* 提取人数 */
-    const enrollmentMatch = text.match(/人数[:：]?(\d+)\/(\d+)/);
-    const enrollment = enrollmentMatch ? `${enrollmentMatch[1]}/${enrollmentMatch[2]}` : '';
+        const weekDay = time.weekDay || 0;
+        const startSlot = time.startSlot !== undefined ? time.startSlot : 0;
+        const endSlot = time.endSlot !== undefined ? time.endSlot : startSlot;
+        const weeks = time.weeks || unit.suggestScheduleWeeks || [];
 
-    /* 判断课程类型 */
-    const isElective = name.includes('（选）') || name.includes('(选)');
-    const type = isElective ? '选修' : '必修';
+        let weeksStr = '';
+        if (weeks.length > 0) {
+          const sortedWeeks = [...weeks].sort((a, b) => a - b);
+          if (sortedWeeks.length === 1) {
+            weeksStr = `${sortedWeeks[0]}周`;
+          } else {
+            weeksStr = `${sortedWeeks[0]}~${sortedWeeks[sortedWeeks.length - 1]}周`;
+          }
+        }
 
-    if (!name) return null;
+        const timeStr = `${startSlot + 1}-${endSlot + 1}节`;
 
-    return {
-      name: name.replace(/^（选）/, '').replace(/^\(选\)/, ''),
-      fullName: name,
-      code,
-      teacher,
-      location,
-      time,
-      slot: startSlot,
-      endSlot,
-      day: dayIndex,
-      weeks,
-      type,
-      enrollment,
-      color: 0, // 前端会分配颜色
-    };
+        const buildingName = building.nameZh || '';
+        const roomName = room.nameZh || room.name || '';
+        const location = buildingName && roomName ? `${buildingName} ${roomName}` : roomName;
+
+        const teacherName = teacher.nameZh || teacher.teacherAssignmentString || '';
+
+        const stdCount = unit.stdCount || 0;
+        const limitCount = unit.limitCount || 0;
+        const enrollment = stdCount > 0 || limitCount > 0 ? `${stdCount}/${limitCount}` : '';
+
+        const dayIndex = weekDay;
+        const dedupeKey = code ? `${dayIndex}-${code}` : `${dayIndex}-${nameZh}-${timeStr}`;
+        if (courseCodeSet[dedupeKey]) continue;
+        courseCodeSet[dedupeKey] = true;
+
+        if (!nameZh) continue;
+
+        const course = {
+          name: nameZh.replace(/^（选）/, '').replace(/^\(选\)/, ''),
+          fullName: nameZh,
+          code,
+          teacher: teacherName,
+          location,
+          time: timeStr,
+          slot: startSlot,
+          endSlot,
+          day: dayIndex,
+          weeks: weeksStr,
+          type,
+          enrollment,
+          color: 0,
+        };
+
+        const arrayIndex = dayIndex - 1;
+        if (arrayIndex >= 0 && arrayIndex < 7) {
+          scheduleData[arrayIndex].push(course);
+        }
+      } catch (err) {
+        console.warn('[EduProxy] 解析课程单元失败:', err.message);
+      }
+    }
+
+    return scheduleData;
   }
 
-  // ==================== 成绩查询 ====================
   /**
-   * GPA标准转换表（上海对外经贸大学标准 4.0 制）
-   * 按分数段转换，而非按等级
+   * 获取 MOOC 课程信息
    */
+  async _fetchMoocCourses() {
+    try {
+      const params = {};
+      if (this.semesterId) params.semesterId = this.semesterId;
+
+      const res = await this.axiosInstance.get('/student/for-std/course-table/get-all-data', {
+        params,
+        timeout: 10000,
+      });
+
+      const data = res.data;
+      if (!data) return [];
+
+      const allUnits = data.courseUnits || data.studentCourseUnits || [];
+      const moocCourses = [];
+      const seen = new Set();
+
+      for (const unit of allUnits) {
+        try {
+          const lesson = unit.lesson || {};
+          const nameZh = lesson.nameZh || '';
+          const lessonKind = lesson.lessonKind || {};
+          const kindName = lessonKind.nameZh || '';
+          const virtualRoom = unit.virtualRoom || {};
+          const remark = unit.remark || lesson.remark || '';
+
+          const isMooc = nameZh.includes('MOOC') ||
+                         kindName.includes('MOOC') ||
+                         kindName.includes('mooc') ||
+                         (virtualRoom && virtualRoom.nameZh);
+
+          if (!isMooc) continue;
+          if (seen.has(nameZh)) continue;
+          seen.add(nameZh);
+
+          let courseName = nameZh.replace(/^（选）/, '').replace(/（MOOC）$/i, '').trim();
+          if (!courseName) continue;
+
+          let platform = { name: '其他平台', url: '' };
+          const fullText = nameZh + ' ' + remark;
+          if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) {
+            platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
+          } else if (fullText.includes('超星尔雅') || fullText.includes('超星')) {
+            platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
+          } else if (fullText.includes('智慧树')) {
+            platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
+          }
+
+          let remarkUrl = '';
+          const urlMatch = fullText.match(/(https?:\/\/[^\s"'<>)]+)/);
+          if (urlMatch) remarkUrl = urlMatch[1];
+
+          moocCourses.push({
+            name: courseName,
+            platform: platform.name,
+            platformUrl: platform.url,
+            remarkUrl,
+          });
+        } catch (err) {
+          console.warn('[EduProxy] 解析 MOOC 课程失败:', err.message);
+        }
+      }
+
+      console.log(`[EduProxy] MOOC课程提取完成，发现 ${moocCourses.length} 门`);
+      return moocCourses;
+    } catch (err) {
+      console.warn('[EduProxy] 获取全部课程数据失败:', err.message);
+      return [];
+    }
+  }
+
+  // ==================== 成绩查询（API） ====================
+
   _scoreToGpaPoint(score) {
     if (isNaN(score) || score < 0) return 0;
     if (score >= 90) return 4.0;
@@ -580,9 +780,6 @@ class EduProxy {
     return 0;
   }
 
-  /**
-   * 分数转等级文字（仅用于前端展示）
-   */
   _scoreToGradeText(score) {
     if (isNaN(score)) return '';
     if (score >= 90) return 'A';
@@ -598,256 +795,170 @@ class EduProxy {
   }
 
   async getGrades() {
-    await this._ensureLoggedIn();
+    this._ensureApiReady();
+
     try {
-      console.log('[EduProxy] 正在获取成绩...');
-      /* 真实成绩页面URL - 会自动跳转到学期索引页 */
-      const gradesUrl = 'https://nbkjw.suibe.edu.cn/student/for-std/grade/sheet';
-      console.log(`[EduProxy] 访问成绩页面: ${gradesUrl}`);
-      await this.page.goto(gradesUrl, {
-        waitUntil: 'load',
-        timeout: NAVIGATION_TIMEOUT
-      });
-      await this._delay(PAGE_LOAD_WAIT);
+      console.log('[EduProxy] 正在通过 API 获取成绩...');
 
-      /* 等待表格出现 */
-      try {
-        await this.page.waitForSelector('table', { timeout: 10000 });
-      } catch (e) {
-        console.log('[EduProxy] 等待成绩表格超时，尝试继续解析...');
+      if (!this.studentId) {
+        console.log('[EduProxy] studentId 未知，尝试获取...');
+        await this._fetchStudentInfo();
       }
 
-      const html = await this.page.content();
-      if (!html) {
-        throw new Error('成绩页面内容为空');
+      if (!this.studentId) {
+        throw new Error('无法获取学生ID，请重新登录');
       }
-      const $ = cheerio.load(html);
-      const grades = [];
-      let totalCredits = 0;
-      let totalGpaPoints = 0;
-      let gpaCreditSum = 0;
 
-      /*
-       * 真实成绩HTML结构（通过浏览器实际查看确认）：
-       * - 页面URL会跳转到 semester-index/xxxxx
-       * - 按学期分组，每学期一个h3标题（如"2025-2026学年 第一学期"）
-       * - 每个学期一个table
-       * - 表头列：课程名称 | 学分 | 绩点 | 总评成绩 | 补考成绩 | 最终成绩
-       * - 课程名格式："课程名 课程代码  |  必修课/选修课  |  类别  |  必修/选修"
-       * - 成绩绝大多数是数字分数（89、82、78等），少数为"合格"
-       * - 绩点由页面直接提供（3.7、3.3、4.0等）
-       * - 最终成绩列在补考成绩之后（第6列，index=5），补考成绩通常为空
-       *
-       * 优化策略：
-       * 1. 优先使用总评成绩（数字分数），而非等级文字
-       * 2. 如果总评成绩是等级文字（合格/优秀等），尝试用最终成绩的数字
-       * 3. GPA按分数标准转换（90+→4.0, 85-89→3.7等），同时保留页面原始绩点
-       */
-      const headings = $('h3');
-      const tables = $('table');
-
-      headings.each((hIndex, hEl) => {
-        const semesterText = $(hEl).text().trim();
-        /* 提取学期标识，如 "2025-2026学年 第一学期" -> "2025-2026-1" */
-        const semMatch = semesterText.match(/(\d{4}-\d{4})学年\s+(第[一二三四五六七八九十]+学期)/);
-        let semester = '';
-        if (semMatch) {
-          const semNumMap = { '一': '1', '二': '2', '三': '3', '四': '4' };
-          const num = semMatch[2].replace('第', '').replace('学期', '');
-          semester = `${semMatch[1]}-${semNumMap[num] || num}`;
+      const res = await this.axiosInstance.get(
+        `/student/for-std/grade/sheet/info/${this.studentId}`,
+        {
+          params: this.semesterId ? { semester: this.semesterId } : {},
+          timeout: 15000,
         }
+      );
 
-        /* 找到对应的表格 */
-        const table = tables.eq(hIndex);
-        if (!table.length) return;
+      const data = res.data;
+      if (!data) {
+        throw new Error('成绩 API 返回空数据');
+      }
 
-        const rows = table.find('tr');
-        rows.each((rIndex, rEl) => {
-          const cells = $(rEl).find('td');
-          /* 跳过表头行（课程名称、学分、绩点...） */
-          if (cells.length < 5) return;
-          const firstCellText = $(cells[0]).text().trim();
-          if (firstCellText === '课程名称') return;
+      const result = this._parseGradesApiData(data);
 
-          /* 解析课程名 */
-          /* 格式："创新创业拓展 A120310004010  |  必修课  |  创新创业拓展  |" */
-          /* 注意：课程代码可能紧跟课程名（无空格），如"创新创业拓展A120310004010" */
-          const courseNameMatch = firstCellText.match(/^(.+?)\s+[A-Z]\d{10,}/)
-            || firstCellText.match(/^(.+?)[A-Z]\d{10,}/);
-          const courseName = courseNameMatch ? courseNameMatch[1].trim() : firstCellText.split(/\s+/)[0];
-
-          /* 解析课程类型 - 格式："| 必修课 |" 或 "| 选修课 |" */
-          const isRequired = firstCellText.includes('必修课');
-          const isElective = firstCellText.includes('选修课');
-          let type = '必修';
-          if (isElective && !isRequired) type = '选修';
-
-          /* 学分 */
-          const credit = parseFloat($(cells[1]).text().trim()) || 0;
-
-          /* 页面上的绩点（仅供参考，我们用自己的标准转换） */
-          const pageGpaPoint = parseFloat($(cells[2]).text().trim()) || 0;
-
-          /* 总评成绩 - 优先使用数字分数 */
-          const scoreText = $(cells[3]).text().trim();
-          let score = parseFloat(scoreText);
-          const isScoreText = !isNaN(score);
-
-          /* 最终成绩（补考/重修后的成绩） */
-          const finalScoreText = $(cells.length > 5 ? cells[5] : cells[4]).text().trim();
-          const finalScore = parseFloat(finalScoreText);
-
-          /* 判断是否为等级文字（合格/优秀/良好/及格/不及格） */
-          const gradeLevelTexts = ['优秀', '良好', '中等', '及格', '合格', '不合格', '不及格'];
-          const isGradeLevelText = !isScoreText && gradeLevelTexts.some(t => scoreText.includes(t));
-
-          /*
-           * 成绩取值策略（按优先级）：
-           * 1. 总评成绩是数字 → 直接使用
-           * 2. 总评成绩是等级文字，最终成绩是数字 → 使用最终成绩
-           * 3. 总评成绩是等级文字 → 将等级映射为分数用于GPA计算
-           */
-          let displayScore;
-          let gpaScore;
-
-          if (isScoreText) {
-            /* 总评成绩是数字，直接使用 */
-            displayScore = score;
-            gpaScore = score;
-          } else if (!isNaN(finalScore)) {
-            /* 总评是等级文字，最终成绩有数字 */
-            displayScore = finalScore;
-            gpaScore = finalScore;
-          } else if (isGradeLevelText) {
-            /* 等级文字映射为分数（用于GPA计算） */
-            const gradeScoreMap = {
-              '优秀': 90,
-              '良好': 85,
-              '中等': 78,
-              '及格': 68,
-              '合格': 82,
-              '不合格': 50,
-              '不及格': 50,
-            };
-            const mappedScore = gradeLevelTexts.find(t => scoreText.includes(t));
-            displayScore = scoreText; /* 显示原始等级文字 */
-            gpaScore = mappedScore ? gradeScoreMap[mappedScore] : 0;
-          } else {
-            displayScore = scoreText;
-            gpaScore = 0;
-          }
-
-          if (!courseName) return;
-
-          /* 使用标准分数计算GPA，而非页面上的绩点 */
-          const calculatedGpaPoint = this._scoreToGpaPoint(gpaScore);
-
-          grades.push({
-            courseName,
-            credit,
-            score: typeof displayScore === 'number' ? displayScore : displayScore,
-            /* scoreNum 始终是数字，用于前端排序和GPA计算 */
-            scoreNum: gpaScore,
-            gpaPoint: calculatedGpaPoint,
-            pageGpaPoint,
-            finalScore: isNaN(finalScore) ? finalScoreText : finalScore,
-            grade: this._scoreToGradeText(gpaScore),
-            semester,
-            type,
-          });
-
-          totalCredits += credit;
-          /* 只统计60分及以上的课程GPA */
-          if (gpaScore >= 60) {
-            totalGpaPoints += calculatedGpaPoint * credit;
-            gpaCreditSum += credit;
-          }
-        });
-      });
-
-      const gpa = gpaCreditSum > 0 ? Math.round((totalGpaPoints / gpaCreditSum) * 100) / 100 : 0;
-      console.log(`[EduProxy] 成绩获取完成，共 ${grades.length} 门课程，GPA: ${gpa}`);
-      return {
-        gpa,
-        totalCredits,
-        courseCount: grades.length,
-        grades
-      };
+      console.log(`[EduProxy] 成绩获取完成，共 ${result.grades.length} 门课程，GPA: ${result.gpa}`);
+      return result;
     } catch (error) {
       console.error('[EduProxy] 获取成绩失败:', error.message);
       throw new Error(`获取成绩失败: ${error.message}`);
     }
   }
 
+  /**
+   * 解析成绩 API 返回的 JSON 数据
+   */
+  _parseGradesApiData(data) {
+    const grades = [];
+    let totalCredits = 0;
+    let totalGpaPoints = 0;
+    let gpaCreditSum = 0;
+
+    const semesters = data.semesterId2studentGrades || data.semesters || {};
+
+    for (const [semId, gradeList] of Object.entries(semesters)) {
+      if (!Array.isArray(gradeList)) continue;
+
+      for (const item of gradeList) {
+        try {
+          const courseName = item.courseName || '';
+          if (!courseName) continue;
+
+          const credit = parseFloat(item.credits) || 0;
+
+          const courseType = item.courseType?.nameZh || item.courseProperty?.nameZh || '';
+          const isRequired = courseType.includes('必修');
+          const isElective = courseType.includes('选修');
+          let type = '必修';
+          if (isElective && !isRequired) type = '选修';
+
+          const semesterName = item.semesterName || '';
+          let semester = '';
+          const semMatch = semesterName.match(/(\d{4}-\d{4})学年\s+(第[一二三四五六七八九十]+学期)/);
+          if (semMatch) {
+            const semNumMap = { '一': '1', '二': '2', '三': '3', '四': '4' };
+            const num = semMatch[2].replace('第', '').replace('学期', '');
+            semester = `${semMatch[1]}-${semNumMap[num] || num}`;
+          } else {
+            semester = semId;
+          }
+
+          const score = item.score;
+          const gaGrade = item.gaGrade?.nameZh || '';
+          const gp = item.gp || 0;
+
+          const isScoreText = !isNaN(score) && score !== null;
+          const isGradeLevelText = !isScoreText && gaGrade;
+
+          let displayScore;
+          let gpaScore;
+
+          if (isScoreText) {
+            displayScore = score;
+            gpaScore = score;
+          } else if (isGradeLevelText) {
+            const gradeScoreMap = {
+              '优秀': 90, '良好': 85, '中等': 78,
+              '及格': 68, '合格': 82, '不合格': 50, '不及格': 50,
+            };
+            displayScore = gaGrade;
+            gpaScore = gradeScoreMap[gaGrade] || 0;
+          } else {
+            displayScore = score || gaGrade || '';
+            gpaScore = 0;
+          }
+
+          const calculatedGpaPoint = this._scoreToGpaPoint(gpaScore);
+
+          grades.push({
+            courseName,
+            credit,
+            score: typeof displayScore === 'number' ? displayScore : displayScore,
+            scoreNum: gpaScore,
+            gpaPoint: calculatedGpaPoint,
+            pageGpaPoint: gp,
+            finalScore: item.gradeDetail?.finalScore || '',
+            grade: this._scoreToGradeText(gpaScore),
+            semester,
+            type,
+          });
+
+          totalCredits += credit;
+          if (gpaScore >= 60) {
+            totalGpaPoints += calculatedGpaPoint * credit;
+            gpaCreditSum += credit;
+          }
+        } catch (err) {
+          console.warn('[EduProxy] 解析成绩条目失败:', err.message);
+        }
+      }
+    }
+
+    const gpa = gpaCreditSum > 0 ? Math.round((totalGpaPoints / gpaCreditSum) * 100) / 100 : 0;
+
+    return {
+      gpa,
+      totalCredits,
+      courseCount: grades.length,
+      grades,
+    };
+  }
+
   // ==================== 辅助方法 ====================
-  async _ensureLoggedIn() {
+
+  _ensureApiReady() {
     if (!this.loggedIn) {
       throw new Error('未登录教务系统，请先完成扫码登录');
     }
+    if (!this.axiosInstance) {
+      throw new Error('API 客户端未初始化，请重新登录');
+    }
+  }
+
+  /**
+   * 验证会话是否仍然有效
+   */
+  async validateSession() {
+    if (!this.axiosInstance) return false;
     try {
-      await this.ensureInitialized();
-      const currentUrl = this.page.url();
-      if (!currentUrl.includes(EDU_HOST)) {
-        console.log('[EduProxy] 当前不在教务系统页面，尝试恢复会话...');
-        await this.page.goto(EDU_HOME_URL, {
-          waitUntil: 'load',
-          timeout: NAVIGATION_TIMEOUT
-        });
-        const newUrl = this.page.url();
-        if (newUrl.includes('authserver') || newUrl.includes('login')) {
-          this.loggedIn = false;
-          throw new Error('登录会话已过期，请重新扫码登录');
-        }
-      }
-    } catch (error) {
-      if (error.message.includes('重新扫码')) {
-        throw error;
-      }
+      await this.axiosInstance.get('/student/params/get-schoolName', { timeout: 5000 });
+      return true;
+    } catch (e) {
+      console.log('[EduProxy] 会话验证失败:', e.message);
       this.loggedIn = false;
-      throw new Error('登录状态验证失败，请重新扫码登录');
+      return false;
     }
   }
 
   async _delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  _scoreToGrade(score) {
-    if (isNaN(score)) return '';
-    if (score >= 90) return 'A';
-    if (score >= 85) return 'A-';
-    if (score >= 82) return 'B+';
-    if (score >= 78) return 'B';
-    if (score >= 75) return 'B-';
-    if (score >= 72) return 'C+';
-    if (score >= 68) return 'C';
-    if (score >= 64) return 'C-';
-    if (score >= 60) return 'D';
-    return 'F';
-  }
-
-  _calculateGPA(grades) {
-    let totalPoints = 0;
-    let totalCredits = 0;
-    for (const item of grades) {
-      const score = parseFloat(item.score);
-      const credit = parseFloat(item.credit);
-      if (isNaN(score) || isNaN(credit) || credit === 0) continue;
-      let point = 0;
-      if (score >= 90) point = 4.0;
-      else if (score >= 85) point = 3.7;
-      else if (score >= 82) point = 3.3;
-      else if (score >= 78) point = 3.0;
-      else if (score >= 75) point = 2.7;
-      else if (score >= 72) point = 2.3;
-      else if (score >= 68) point = 2.0;
-      else if (score >= 64) point = 1.5;
-      else if (score >= 60) point = 1.0;
-      else point = 0;
-      totalPoints += point * credit;
-      totalCredits += credit;
-    }
-    return totalCredits > 0 ? totalPoints / totalCredits : 0;
   }
 }
 

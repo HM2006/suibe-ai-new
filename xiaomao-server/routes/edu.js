@@ -1,10 +1,11 @@
 /**
- * 教务系统集成路由模块（修复版）
+ * 教务系统集成路由模块（纯 HTTP 版）
  *
- * 修复内容：
- * 1. 增加详细的错误日志
- * 2. 增加诊断端点
- * 3. 优化错误响应格式
+ * 修改内容：
+ * 1. 完全移除 Puppeteer/浏览器相关逻辑
+ * 2. 二维码获取直接通过 HTTP 请求，无需浏览器初始化
+ * 3. sync 端点课表和成绩可并行获取
+ * 4. 添加会话验证端点
  */
 
 const express = require('express');
@@ -21,79 +22,55 @@ function getEduProxy() {
 
 /**
  * GET /api/edu/status - 获取教务系统代理状态
- * 用于诊断浏览器和登录状态
  */
 router.get('/edu/status', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
   res.json({
     success: true,
     data: {
-      initialized: eduProxy.initialized,
       loggedIn: eduProxy.loggedIn,
-      currentUrl: eduProxy.currentUrl,
-      cookieCount: eduProxy.cookies.length,
+      cookieCount: Object.keys(eduProxy.cookieJar || {}).length,
+      studentId: eduProxy.studentId,
+      semesterId: eduProxy.semesterId,
+      qrUuid: eduProxy.qrUuid,
+      apiMode: !!eduProxy.axiosInstance,
       timestamp: new Date().toISOString()
     }
   });
 }));
 
 /**
- * GET /api/edu/debug/screenshot - 获取当前页面截图（调试用）
+ * GET /api/edu/session/validate - 验证会话是否仍然有效
  */
-router.get('/edu/debug/screenshot', asyncHandler(async (req, res) => {
+router.get('/edu/session/validate', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
-  if (!eduProxy.page) {
-    throw new AppError('浏览器未初始化', 400);
-  }
-  const screenshot = await eduProxy.page.screenshot({
-    type: 'png',
-    fullPage: true,
-    encoding: 'base64'
-  });
-  const currentUrl = eduProxy.page.url();
+  const valid = await eduProxy.validateSession();
   res.json({
     success: true,
-    data: {
-      screenshot,
-      currentUrl,
-      timestamp: new Date().toISOString()
-    }
+    data: { valid }
   });
 }));
 
 // ==================== 登录相关 ====================
 
 /**
- * GET /api/edu/login/qr - 获取登录二维码
+ * GET /api/edu/login/qr - 获取登录二维码（纯 HTTP，无需浏览器）
  */
 router.get('/edu/login/qr', asyncHandler(async (req, res) => {
   console.log('[EduRoute] 收到获取二维码请求');
   const startTime = Date.now();
 
-  const eduProxy = getEduProxy();
+  let eduProxy = getEduProxy();
 
-  // 如果之前已经初始化但失败了，先重置
-  if (eduProxy.initialized && !eduProxy.browser) {
-    console.log('[EduRoute] 浏览器状态异常，重置实例...');
+  // 如果已登录，先重置
+  if (eduProxy.loggedIn) {
+    console.log('[EduRoute] 已有登录状态，先重置...');
     EduProxy.resetInstance();
+    eduProxy = getEduProxy();
   }
 
-  const freshProxy = getEduProxy();
-
-  // 确保浏览器已初始化
   try {
-    await freshProxy.ensureInitialized();
-  } catch (initError) {
-    console.error('[EduRoute] 浏览器初始化失败:', initError.message);
-    throw new AppError(
-      `浏览器初始化失败: ${initError.message}。请确保服务器已安装Chrome/Chromium。`,
-      500, 'BROWSER_INIT_FAILED'
-    );
-  }
-
-  // 获取登录二维码
-  try {
-    const result = await freshProxy.getLoginQRCode();
+    const result = await eduProxy.getLoginQRCode();
     const elapsed = Date.now() - startTime;
     console.log(`[EduRoute] 二维码获取成功，耗时: ${elapsed}ms`);
 
@@ -110,11 +87,10 @@ router.get('/edu/login/qr', asyncHandler(async (req, res) => {
     console.error('[EduRoute] 错误详情:', qrError.message);
 
     // 尝试重置并重试一次
-    console.log('[EduRoute] 尝试重置浏览器并重试...');
+    console.log('[EduRoute] 尝试重置并重试...');
     try {
       EduProxy.resetInstance();
       const retryProxy = getEduProxy();
-      await retryProxy.ensureInitialized();
       const result = await retryProxy.getLoginQRCode();
       console.log('[EduRoute] 重试成功！');
       res.json({
@@ -186,7 +162,6 @@ router.get('/edu/schedule', asyncHandler(async (req, res) => {
   }
   const scheduleData = await eduProxy.getSchedule();
 
-  // 如果请求带有userId（通过query参数），保存到缓存并更新连接状态
   const { userId } = req.query;
   if (userId) {
     try {
@@ -217,7 +192,6 @@ router.get('/edu/mooc', asyncHandler(async (req, res) => {
     return res.json({ success: true, data: cache.data.moocCourses, fromCache: true });
   }
 
-  // 缓存中没有MOOC数据，返回空数组
   res.json({ success: true, data: [], fromCache: false });
 }));
 
@@ -236,7 +210,6 @@ router.get('/edu/grades', asyncHandler(async (req, res) => {
     gradesData.courseCount = gradesData.grades.length;
   }
 
-  // 如果请求带有userId（通过query参数），保存到缓存并更新连接状态
   const { userId } = req.query;
   if (userId) {
     try {
@@ -255,30 +228,28 @@ router.get('/edu/grades', asyncHandler(async (req, res) => {
 // ==================== 合并同步 ====================
 
 /**
- * GET /api/edu/sync - 一次请求顺序获取课表和成绩并缓存
- * 注意：课表和成绩共用同一个浏览器page，必须顺序获取
+ * GET /api/edu/sync - 一次请求获取课表和成绩并缓存
+ * 纯 HTTP 版本：课表和成绩可以并行获取
  */
 router.get('/edu/sync', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
 
-  // 刚登录完成，直接检查 loggedIn 标志即可
   if (!eduProxy.loggedIn) {
     throw new AppError('未登录教务系统，请先完成扫码登录', 401, 'NOT_LOGGED_IN');
   }
 
   const { userId, semester } = req.query;
 
-  // 顺序获取：共用同一个 page，不能并行
-  const scheduleData = await eduProxy.getSchedule();
-  const gradesData = await eduProxy.getGrades();
+  const [scheduleData, gradesData] = await Promise.all([
+    eduProxy.getSchedule(),
+    eduProxy.getGrades(),
+  ]);
 
-  // 按学期筛选成绩
   if (semester && gradesData.grades) {
     gradesData.grades = gradesData.grades.filter(g => g.semester === semester);
     gradesData.courseCount = gradesData.grades.length;
   }
 
-  // 缓存数据
   if (userId) {
     try {
       const db = require('../services/database');
@@ -304,10 +275,9 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
 
 router.post('/edu/logout', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
-  await eduProxy.close();
+  eduProxy.close();
   EduProxy.resetInstance();
 
-  // 如果带有userId，更新数据库中的连接状态
   const { userId } = req.query;
   if (userId) {
     try {
