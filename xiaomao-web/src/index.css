@@ -48,6 +48,7 @@
   --nav-width: 240px;
   --header-height: 60px;
   --bottom-nav-height: 64px;
+  --content-max-width: 1120px;
 
   /* 过渡 */
   --transition-fast: 150ms ease;
@@ -354,16 +355,18 @@ select {
   min-width: 0;
   /* 移除这里的 padding-top，由 header 统一处理 */
   padding-top: 0;
+  background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
 }
 
 /* 顶部标题栏 - 项目A样式 */
 .top-header {
   height: var(--header-height);
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--card-border);
   display: flex;
   align-items: center;
-  padding: 0 24px;
+  padding: 0 28px;
   gap: 12px;
   flex-shrink: 0;
   position: sticky;
@@ -389,6 +392,22 @@ select {
   overflow-x: hidden;
   min-height: 0;
   position: relative;
+}
+
+.campus-grid,
+.schedule-container,
+.grades-container,
+.library-container,
+.news-container,
+.map-container {
+  width: min(100%, var(--content-max-width));
+  margin: 0 auto;
+}
+
+.chat-messages,
+.chat-input-area {
+  width: min(100%, var(--content-max-width));
+  margin: 0 auto;
 }
 
 /* ========================================
@@ -834,6 +853,7 @@ select {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: all var(--transition-normal);
   text-decoration: none;
@@ -1748,6 +1768,7 @@ select {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   padding: 20px;
+  box-shadow: var(--shadow-sm);
   text-align: center;
 }
 
@@ -1965,6 +1986,7 @@ select {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   transition: all var(--transition-fast);
 }
 
@@ -2087,6 +2109,7 @@ select {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   padding: 20px;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: all var(--transition-normal);
 }
@@ -2421,10 +2444,12 @@ select {
 
   /* 项目B：移动端 chat-messages padding 缩小 */
   .chat-messages {
+    width: 100%;
     padding: 16px;
   }
 
   .chat-input-area {
+    width: 100%;
     padding: 12px 16px;
     padding-bottom: calc(12px + var(--safe-area-bottom));
     gap: 8px;
@@ -2889,6 +2914,7 @@ select {
   border: 1px solid var(--card-border);
   border-radius: 12px;
   padding: 24px;
+  box-shadow: var(--shadow-sm);
   text-align: center;
 }
 
