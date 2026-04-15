@@ -58,6 +58,7 @@ function useRoomData() {
 function OverviewTab({ data, buildings, dates, getEmpty }) {
   const [date, setDate] = useState('')
   const [period, setPeriod] = useState(null)
+  const [showFreeOnly, setShowFreeOnly] = useState(false)
 
   // 根据当前时间计算当前节次
   const getCurrentPeriod = () => {
