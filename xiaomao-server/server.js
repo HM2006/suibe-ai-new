@@ -176,10 +176,10 @@ app.use('/api', eduRoutes);
 
 // 用户系统路由
 app.use('/api', userRoutes);
-app.use('/api', adminRoutes);
-
-// 随记路由
 app.use('/api', notesRoutes);
+
+// 管理员路由放最后（避免全局中间件拦截普通请求）
+app.use('/api', adminRoutes);
 
 // 空教室路由
 // app.use('/api', emptyRoomsRoutes);
