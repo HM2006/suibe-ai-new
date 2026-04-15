@@ -260,7 +260,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
                           <td style={{ padding: '7px 10px', fontWeight: 500 }}>{br[id][1]}</td>
                           <td style={{ padding: '7px 10px' }}>{br[id][0]}座</td>
                           <td style={{ padding: '7px 10px', color: free ? '#059669' : '#DC2626', fontWeight: 500 }}>
-                            {free ? '✅ 空闲' : '🔴 占用'}
+                            {free ? '空闲' : '占用'}
                           </td>
                         </tr>
                       )

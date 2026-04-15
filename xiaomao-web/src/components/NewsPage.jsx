@@ -278,6 +278,7 @@ function NewsPage() {
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
+                          justifyContent: 'flex-end',
                           gap: '4px',
                           fontSize: '12px',
                           color: 'var(--primary)',
