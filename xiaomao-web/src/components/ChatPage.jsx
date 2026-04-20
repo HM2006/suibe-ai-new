@@ -231,6 +231,32 @@ function ChatPage() {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let fullContent = ''
+        /* 打字机动画队列 */
+        let pendingChars = ''
+        let typewriterTimer = null
+
+        const flushTypewriter = () => {
+          if (typewriterTimer) return
+          typewriterTimer = setInterval(() => {
+            if (pendingChars.length === 0) {
+              clearInterval(typewriterTimer)
+              typewriterTimer = null
+              return
+            }
+            /* 每次吐出1~2个字符，模拟自然打字节奏 */
+            const count = Math.random() < 0.3 ? 2 : 1
+            const chars = pendingChars.slice(0, count)
+            pendingChars = pendingChars.slice(count)
+            fullContent += chars
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: fullContent }
+                  : msg
+              )
+            )
+          }, 25)
+        }
 
         while (true) {
           const { done, value } = await reader.read()
@@ -246,29 +272,25 @@ function ChatPage() {
               try {
                 const parsed = JSON.parse(data)
                 const content = parsed.answer || parsed.content || parsed.delta || ''
-                fullContent += content
-                /* 逐步更新AI消息内容 */
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: fullContent }
-                      : msg
-                  )
-                )
+                pendingChars += content
+                flushTypewriter()
               } catch {
-                /* 如果不是JSON，直接作为文本内容 */
-                fullContent += data
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: fullContent }
-                      : msg
-                  )
-                )
+                pendingChars += data
+                flushTypewriter()
               }
             }
           }
         }
+
+        /* 流结束后，等打字机动画把剩余字符全部输出 */
+        await new Promise((resolve) => {
+          const wait = setInterval(() => {
+            if (pendingChars.length === 0 && !typewriterTimer) {
+              clearInterval(wait)
+              resolve()
+            }
+          }, 30)
+        })
       } else {
         /* 普通JSON响应 */
         const data = await response.json()
