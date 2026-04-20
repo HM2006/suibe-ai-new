@@ -172,6 +172,17 @@ function init() {
     );
   `);
 
+  // 创建培养方案缓存表
+  db.exec(`
+      CREATE TABLE IF NOT EXISTS training_program_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
   console.log('[DB] 数据库表初始化完成');
 }
 
@@ -525,6 +536,25 @@ function getUserCourseNames(userId) {
   return Array.from(nameSet);
 }
 
+function saveTrainingProgramCache(userId, programData) {
+  const data = JSON.stringify(programData);
+  const stmt = db.prepare(
+    "INSERT INTO training_program_cache (user_id, data, updated_at) VALUES (?, ?, datetime('now','localtime'))"
+  );
+  stmt.run(userId, data);
+}
+
+function getTrainingProgramCache(userId) {
+  try {
+    const stmt = db.prepare('SELECT * FROM training_program_cache WHERE user_id = ? ORDER BY id DESC LIMIT 1');
+    const row = stmt.get(userId);
+    if (!row) return null;
+    return { ...row, data: JSON.parse(row.data) };
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * 获取数据库实例（供需要直接操作db的模块使用）
  * @returns {Database}
@@ -562,4 +592,7 @@ module.exports = {
   getNoteAttachmentsWithData,
   deleteAttachment,
   getUserCourseNames,
+  // 培养方案
+  saveTrainingProgramCache,
+  getTrainingProgramCache,
 };

@@ -21,6 +21,7 @@ import {
   Car,
   Grid2X2,
   X,
+  BookMarked,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -30,6 +31,7 @@ const sidebarNavItems = [
   { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
+  { path: '/campus/training', label: '培养方案', icon: BookMarked },
   // { path: '/campus/library', label: '图书馆', icon: BookOpen }, // 暂时隐藏
   { path: '/campus/news', label: '资讯', icon: Newspaper },
   { path: '/notes', label: '随记', icon: FileText },
@@ -51,6 +53,7 @@ const bottomNavItems = [
 /* "更多"面板中的功能项（底部栏未直接展示的） */
 const moreNavItems = [
   { path: '/campus/grades', label: '成绩查询', icon: BarChart3, desc: '查看各科成绩' },
+  { path: '/campus/training', label: '培养方案', icon: BookMarked, desc: '查看专业课程规划' },
   { path: '/mooc', label: 'MOOC助手', icon: GraduationCap, desc: '网课学习管理' },
   { path: '/empty-rooms', label: '空教室查询', icon: DoorOpen, desc: '快速找到空闲教室' },
   { path: '/park', label: '停车定位', icon: Car, desc: '记录停车位置' },
@@ -65,6 +68,7 @@ function getPageTitle(pathname) {
     '/campus/map': { title: '校园导航', subtitle: '快速找到目的地' },
     '/campus/schedule': { title: '课表查询', subtitle: '查看本周课程安排' },
     '/campus/grades': { title: '成绩查询', subtitle: '查看各科成绩' },
+    '/campus/training': { title: '培养方案', subtitle: '查看专业课程规划' },
     '/campus/library': { title: '图书馆', subtitle: '借阅与图书管理' },
     '/campus/news': { title: '校园资讯', subtitle: '最新校园动态' },
     '/notes': { title: '随记', subtitle: '记录课程要点' },

@@ -19,6 +19,7 @@ import NotesPage from './components/NotesPage'
 import MoocPage from './components/MoocPage'
 import EmptyRoomsPage from './components/EmptyRoomsPage'
 import ParkPage from './components/ParkPage'
+import TrainingProgramPage from './components/TrainingProgramPage'
 
 function App() {
   return (
@@ -41,6 +42,9 @@ function App() {
 
         {/* 成绩查询 */}
         <Route path="/campus/grades" element={<Layout><GradesPage /></Layout>} />
+
+        {/* 培养方案 */}
+        <Route path="/campus/training" element={<Layout><TrainingProgramPage /></Layout>} />
 
         {/* 图书馆 - 暂时隐藏 */}
         {/* <Route path="/campus/library" element={<Layout><LibraryPage /></Layout>} /> */}

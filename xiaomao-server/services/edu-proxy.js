@@ -321,7 +321,7 @@ class EduProxy {
    * 返回: { loggedIn: boolean, message?: string }
    */
   async checkLoginStatus() {
-    if (this.loggedIn) {
+    if (this.axiosInstance) {
       return true;
     }
     return false;
@@ -915,6 +915,16 @@ class EduProxy {
 
       let totalCourses = 0;
       Object.values(scheduleData).forEach(courses => totalCourses += courses.length);
+
+      /* 在同一会话中获取培养方案 */
+      try {
+        console.log('[EduProxy] 课表获取完成，开始获取培养方案...');
+        const program = await this.getTrainingProgram();
+        this._lastTrainingProgram = program;
+        console.log('[EduProxy] 培养方案获取完成');
+      } catch (err) {
+        console.warn('[EduProxy] 培养方案获取失败:', err.message);
+      }
 
       console.log(`[EduProxy] 课表获取完成，共 ${totalCourses} 门课程`);
       return {
@@ -1535,6 +1545,72 @@ class EduProxy {
       this.loggedIn = false;
       return false;
     }
+  }
+
+  async getTrainingProgram() {
+    if (!this.axiosInstance) throw new Error('未登录教务系统');
+    console.log('[EduProxy] 培养方案: 获取 programId...');
+    let programId = this.programId || 26740;
+    if (programId) {
+      console.log('[EduProxy] 培养方案: 使用 programId:', programId);
+    }
+    const url = `/student/for-std/credit-certification-apply/other_apply/get-all-course-module?programId=${programId}`;
+    console.log('[EduProxy] 培养方案: 请求', url);
+    const res = await this.axiosInstance.get(url, { timeout: 30000 });
+    const data = res.data;
+    if (!data) throw new Error('培养方案数据为空');
+    console.log('[EduProxy] 培养方案: 数据获取成功，大小:', JSON.stringify(data).length, '字节');
+    this._lastTrainingProgramRaw = data;
+    return this._parseTrainingProgram(data);
+  }
+
+  _parseTrainingProgram(data) {
+    const result = { modules: [], totalRequiredCredits: 0, totalCompletedCredits: 0, totalCourses: 0 };
+    try {
+      const topChildren = data.children || [];
+      console.log('[EduProxy] 培养方案: 顶层有', topChildren.length, '个模块');
+      const parseModule = (mod, depth = 0) => {
+        if (!mod) return null;
+        const name = mod.type?.nameZh || mod.nameZh || mod.name || `模块${mod.id}`;
+        const reqInfo = mod.requireInfo || {};
+        const requiredCredits = parseFloat(reqInfo.requiredCredits) || 0;
+        const node = { id: mod.id, name, requiredCredits, completedCredits: 0, children: [], courses: [], depth, creditBySubModule: mod.creditBySubModule || {} };
+        if (Array.isArray(mod.children) && mod.children.length > 0) {
+          node.children = mod.children.map(c => parseModule(c, depth + 1)).filter(Boolean);
+        }
+        if (Array.isArray(mod.planCourses) && mod.planCourses.length > 0) {
+          node.courses = mod.planCourses.map(pc => {
+            const course = pc.course || {};
+            const marks = pc.planCourseMarks || [];
+            return {
+              id: pc.id, code: course.code || '', name: course.nameZh || course.name || '',
+              credits: parseFloat(course.credits) || 0, compulsory: pc.compulsory || false,
+              property: pc.courseProperty?.nameZh || '', propertyMark: pc.courseProperty?.abbrevia || '',
+              marks: marks.map(m => ({ name: m.nameZh || m.name || '', mark: m.mark || '' })),
+              terms: pc.readableTerms || [], suggestTerms: pc.readableSuggestTerms || [],
+              periodInfo: pc.periodInfo || {}, examMode: pc.examMode?.nameZh || '',
+              preCourses: (pc.preCourses || []).map(p => p.course?.nameZh || p.course?.name || '').filter(Boolean),
+              completed: false, score: '',
+            };
+          });
+        }
+        return node;
+      };
+      result.modules = topChildren.map(m => parseModule(m, 0)).filter(Boolean);
+      const countAll = (modules) => {
+        for (const mod of modules) {
+          result.totalRequiredCredits += mod.requiredCredits || 0;
+          if (mod.courses.length > 0) result.totalCourses += mod.courses.length;
+          if (mod.children.length > 0) countAll(mod.children);
+        }
+      };
+      countAll(result.modules);
+      console.log('[EduProxy] 培养方案解析完成: 总要求学分', result.totalRequiredCredits, '总课程数', result.totalCourses);
+    } catch (err) {
+      console.error('[EduProxy] 培养方案解析失败:', err.message);
+      result.rawData = data;
+    }
+    return result;
   }
 
   async _delay(ms) {
