@@ -109,7 +109,7 @@ function DashboardPage() {
     const fetchSchedule = async () => {
       setScheduleLoading(true)
       try {
-        if (!token) { setScheduleLoading(false); return }
+        if (!token) return
         const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
@@ -265,7 +265,7 @@ function DashboardPage() {
       )
     }
     /* 未登录或无课表缓存 */
-    if (!token || schedule === null) {
+    if (schedule === null) {
       return (
         <div className="dashboard-card">
           <div className="dashboard-card-header">

@@ -146,6 +146,7 @@ function SchedulePage() {
 
   /* 真实课表数据（从缓存加载） */
   const [realSchedule, setRealSchedule] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [dataSource, setDataSource] = useState('mock')
 
   /* 周选择器状态 */
@@ -155,7 +156,8 @@ function SchedulePage() {
   /* 组件挂载时，从profile获取缓存的课表数据 */
   useEffect(() => {
     const loadData = async () => {
-      if (!token) return
+      if (!token) { setIsLoading(false); return }
+      setIsLoading(true)
       try {
         const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -176,6 +178,8 @@ function SchedulePage() {
         }
       } catch (err) {
         console.warn('加载缓存课表失败:', err)
+      } finally {
+        setIsLoading(false)
       }
     }
     loadData()
@@ -281,8 +285,23 @@ function SchedulePage() {
         </div>
       </div>
 
+      {/* 加载骨架屏 */}
+      {isLoading && (
+        <div className="schedule-loading">
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--outline-variant)' }}>
+              <div style={{ width: 60, height: 14, borderRadius: 4, background: 'var(--surface-container)', animation: 'pulse 1.5s infinite' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ width: '50%', height: 16, borderRadius: 4, background: 'var(--surface-container)', marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
+                <div style={{ width: '30%', height: 12, borderRadius: 4, background: 'var(--surface-container)', animation: 'pulse 1.5s infinite' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 未连接教务系统提示 */}
-      {!realSchedule && (
+      {!isLoading && !realSchedule && (
         <div style={{
           padding: '40px 20px',
           textAlign: 'center',

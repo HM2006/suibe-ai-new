@@ -106,7 +106,7 @@ function NewsPage() {
   /* 新闻列表 */
   const [newsList, setNewsList] = useState(null)
   /* 加载状态 */
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   /* 数据来源标识 */
   const [dataSource, setDataSource] = useState('mock')
   /* 刷新按钮旋转状态 */

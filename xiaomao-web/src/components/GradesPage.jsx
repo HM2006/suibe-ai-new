@@ -115,6 +115,7 @@ function GradesPage() {
 
   /* 真实成绩数据（从缓存加载） */
   const [realGrades, setRealGrades] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [realGPA, setRealGPA] = useState(null)
   const [realTotalCredits, setRealTotalCredits] = useState(null)
   const [dataSource, setDataSource] = useState('mock')
@@ -123,6 +124,7 @@ function GradesPage() {
   useEffect(() => {
     const loadCachedGrades = async () => {
       if (!token) return
+      setIsLoading(true)
       try {
         const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -143,6 +145,8 @@ function GradesPage() {
         }
       } catch (err) {
         console.warn('加载缓存成绩失败:', err)
+      } finally {
+        setIsLoading(false)
       }
     }
     loadCachedGrades()
@@ -235,8 +239,25 @@ function GradesPage() {
         </div>
       </div>
 
+      {/* 加载骨架屏 */}
+      {isLoading && (
+        <div className="grades-loading">
+          {[1,2,3,4,5].map(i => (
+            <div key={i} className="grade-skeleton" style={{ display: 'flex', gap: 16, padding: '16px 0', borderBottom: '1px solid var(--outline-variant)' }}>
+              <div style={{ flex: 2 }}>
+                <div style={{ width: '60%', height: 16, borderRadius: 4, background: 'var(--surface-container)', marginBottom: 8, animation: 'pulse 1.5s infinite' }} />
+                <div style={{ width: '40%', height: 12, borderRadius: 4, background: 'var(--surface-container)', animation: 'pulse 1.5s infinite' }} />
+              </div>
+              <div style={{ flex: 1, textAlign: 'right' }}>
+                <div style={{ width: 50, height: 20, borderRadius: 4, background: 'var(--surface-container)', marginLeft: 'auto', animation: 'pulse 1.5s infinite' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 未连接教务系统提示 */}
-      {!realGrades && (
+      {!isLoading && !realGrades && (
         <div style={{
           padding: '40px 20px',
           textAlign: 'center',
@@ -267,7 +288,7 @@ function GradesPage() {
       )}
 
       {/* 有数据时显示统计和列表 */}
-      {realGrades && (<>
+      {!isLoading && realGrades && (<>
 
       {/* 统计卡片 */}
       <div className="grades-stats">
