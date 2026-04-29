@@ -246,6 +246,33 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
               <QrCode size={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
               请使用微信扫描二维码登录
             </div>
+            <button
+              className="edu-login-wechat-btn"
+              onClick={() => {
+                // 尝试打开微信
+                const wechatUrl = 'weixin://'
+                const appStoreUrl = 'https://apps.apple.com/app/wechat/id414478124'
+                const googlePlayUrl = 'https://play.google.com/store/apps/details?id=com.tencent.mm'
+                
+                // 尝试通过自定义 scheme 打开微信
+                const link = document.createElement('a')
+                link.href = wechatUrl
+                link.click()
+                
+                // 2秒后如果还在页面，说明没有微信，跳转到下载页
+                setTimeout(() => {
+                  if (!document.hidden) {
+                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+                    window.open(isIOS ? appStoreUrl : googlePlayUrl, '_blank')
+                  }
+                }, 2000)
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05a6.329 6.329 0 0 1-.248-1.753c0-3.694 3.381-6.69 7.555-6.69.258 0 .507.023.76.042C16.648 4.634 13.022 2.188 8.691 2.188zm-2.35 4.477a1.06 1.06 0 1 1 0 2.12 1.06 1.06 0 0 1 0-2.12zm4.7 0a1.06 1.06 0 1 1 0 2.12 1.06 1.06 0 0 1 0-2.12zM16.885 9.477c-3.694 0-6.69 2.71-6.69 6.055 0 3.344 2.996 6.055 6.69 6.055.726 0 1.424-.108 2.082-.306a.714.714 0 0 1 .59.08l1.394.816a.267.267 0 0 0 .136.044c.131 0 .238-.108.238-.242 0-.06-.023-.117-.039-.174l-.285-1.082a.484.484 0 0 1 .175-.545c1.508-1.103 2.46-2.728 2.46-4.546-.09-3.345-3.086-6.055-6.78-6.055h.049zm-2.35 3.688a.876.876 0 1 1 0 1.752.876.876 0 0 1 0-1.752zm4.7 0a.876.876 0 1 1 0 1.752.876.876 0 0 1 0-1.752z"/>
+              </svg>
+              打开微信扫码
+            </button>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '4px' }}>
               扫码后将自动检测登录状态...
             </div>

@@ -309,6 +309,22 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
     }
   }
 
+  // 保存学生真实姓名和专业年级到用户表
+  try {
+    const studentInfo = eduProxy.getStudentInfo();
+    if (studentInfo.studentName || studentInfo.studentMajor) {
+      const db = require('../services/database');
+      db.updateUserEduInfo(
+        parseInt(userId),
+        studentInfo.studentName || '',
+        studentInfo.studentMajor || ''
+      );
+      console.log(`[EduRoute] 学生信息已保存: ${studentInfo.studentName}, ${studentInfo.studentMajor}`);
+    }
+  } catch (e) {
+    console.warn('[EduRoute] 保存学生信息失败:', e.message);
+  }
+
   res.json({
     success: true,
     data: {

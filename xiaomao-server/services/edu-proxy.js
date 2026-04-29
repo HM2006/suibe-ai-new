@@ -785,6 +785,84 @@ class EduProxy {
         }
       }
 
+      /* 步骤4：获取学生姓名和专业年级信息 */
+      try {
+        console.log('[EduProxy] 步骤4: 获取学生姓名和专业年级信息 ...');
+
+        // 从成绩 API 响应中提取学生姓名
+        if (this.studentId) {
+          try {
+            const infoRes = await this.axiosInstance.get(
+              `/student/for-std/grade/sheet/info/${this.studentId}`,
+              { timeout: 15000 }
+            );
+            if (infoRes?.data) {
+              // 尝试从成绩数据中提取学生姓名
+              const semesters = infoRes.data.semesterId2studentGrades || infoRes.data.semesters || {};
+              const semKeys = Object.keys(semesters);
+              if (semKeys.length > 0) {
+                const firstSem = semesters[semKeys[0]];
+                // 成绩数据中通常包含 student.name 或直接在顶层
+                if (firstSem && firstSem.student && firstSem.student.name) {
+                  this.studentName = firstSem.student.name;
+                }
+              }
+              // 也尝试从顶层获取
+              if (!this.studentName && infoRes.data.studentName) {
+                this.studentName = infoRes.data.studentName;
+              }
+            }
+          } catch (e) {
+            console.warn('[EduProxy] 步骤4 从成绩API获取学生信息失败:', e.message);
+          }
+        }
+
+        // 从课表页面 HTML 中提取学生姓名和专业信息
+        try {
+          const ctRes = await this.axiosInstance.get('/student/for-std/course-table', {
+            maxRedirects: 5,
+            timeout: 15000,
+          });
+          const ctHtml = typeof ctRes.data === 'string' ? ctRes.data : '';
+
+          // 提取学生姓名（多种模式匹配）
+          if (!this.studentName) {
+            const namePatterns = [
+              /studentName\s*[:=]\s*['"]([^'"]+)['"]/,
+              /class="[^"]*student-name[^"]*"[^>]*>([^<]+)/,
+              /var\s+studentName\s*=\s*['"]([^'"]+)['"]/,
+            ];
+            for (const pattern of namePatterns) {
+              const match = ctHtml.match(pattern);
+              if (match) {
+                this.studentName = match[1].trim();
+                break;
+              }
+            }
+          }
+
+          // 提取专业年级信息
+          const majorPatterns = [
+            /(20\d{2}级[^<]*?(?:类|专业)[^<]*)/,
+            /class="[^"]*(?:major|department|college)[^"]*"[^>]*>([^<]+)/,
+            /var\s+studentMajor\s*=\s*['"]([^'"]+)['"]/,
+          ];
+          for (const pattern of majorPatterns) {
+            const match = ctHtml.match(pattern);
+            if (match) {
+              this.studentMajor = match[1].trim();
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn('[EduProxy] 步骤4 从课表页面获取学生信息失败:', e.message);
+        }
+
+        console.log(`[EduProxy] 步骤4 学生信息: studentName=${this.studentName || '(未获取)'}, studentMajor=${this.studentMajor || '(未获取)'}`);
+      } catch (e) {
+        console.warn('[EduProxy] 步骤4 获取学生信息失败:', e.message);
+      }
+
       console.log(`[EduProxy] 学生信息获取完成: studentId=${this.studentId}, personId=${this.personId}, semesterId=${this.semesterId}`);
 
       if (!this.studentId) {
@@ -793,6 +871,17 @@ class EduProxy {
     } catch (error) {
       console.error('[EduProxy] 获取学生信息失败:', error.message);
     }
+  }
+
+  /**
+   * 获取已缓存的学生姓名和专业年级信息
+   * @returns {{ studentName: string, studentMajor: string }}
+   */
+  getStudentInfo() {
+    return {
+      studentName: this.studentName || '',
+      studentMajor: this.studentMajor || '',
+    };
   }
 
   // ==================== 课表查询（API） ====================

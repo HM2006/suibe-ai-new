@@ -2,10 +2,10 @@
    小贸 - 用户页面
    登录/注册表单 + 用户信息展示 + 教务系统登录入口
    ======================================== */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
-import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera, RefreshCw } from 'lucide-react'
+import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera, RefreshCw, Pencil, X } from 'lucide-react'
 import EduLoginModal from './EduLoginModal'
 import { API } from '../config/api'
 
@@ -322,11 +322,53 @@ function UserProfile() {
   const [eduSyncStatus, setEduSyncStatus] = useState('') // 'success' | 'error' | ''
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
 
-  /* 预设头像列表 */
-  const avatarOptions = ['😎', '🐱', '🐶', '🦊', '🐼', '🐨', '🦁', '🐯', '🐸', '🤖', '👽', '🎃', '🌟', '🎯', '🎨', '📚', '🔥', '❄️', '🌸', '🍀']
+  /* 昵称编辑相关状态 */
+  const [editingNickname, setEditingNickname] = useState(false)
+  const [nicknameInput, setNicknameInput] = useState('')
 
-  /* 更新头像 */
-  const handleAvatarChange = async (emoji) => {
+  /* 图片上传相关状态 */
+  const [previewImage, setPreviewImage] = useState(null)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const previewCanvasRef = useRef(null)
+  const previewImgRef = useRef(null)
+
+  /* 预设头像列表 */
+  const AVATAR_EMOJIS = ['😀','😎','🤓','🥳','😴','🤖','👻','🐱','🐶','🦊','🐼','🐨','🦁','🐯','🦄','🌸','⭐','🔥','💎','🎵']
+
+  /* 当 user 变化时同步 nicknameInput */
+  useEffect(() => {
+    if (user) setNicknameInput(user.nickname || '')
+  }, [user])
+
+  /* 保存昵称 */
+  const handleSaveNickname = async () => {
+    if (!nicknameInput.trim()) return
+    try {
+      const res = await fetch(`${API.user}/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: nicknameInput.trim() }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success) {
+          refreshProfile()
+          setEditingNickname(false)
+        }
+      }
+    } catch (err) {
+      console.error('修改昵称失败:', err)
+    }
+  }
+
+  /* 选择 emoji 头像 */
+  const handleSelectEmoji = async (emoji) => {
     try {
       const res = await fetch(`${API.user}/avatar`, {
         method: 'PUT',
@@ -336,13 +378,107 @@ function UserProfile() {
         },
         body: JSON.stringify({ avatar: emoji }),
       })
-      const data = await res.json()
-      if (data.success) {
+      if (res.ok) {
         await refreshProfile()
         setShowAvatarPicker(false)
       }
     } catch (err) {
-      console.warn('[UserPage] 更新头像失败:', err)
+      console.warn('[UserPage] 设置头像失败:', err)
+    }
+  }
+
+  /* 选择图片文件 */
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      alert('图片大小不能超过 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setPreviewImage(ev.target.result)
+      setZoom(1)
+      setPan({ x: 0, y: 0 })
+      setShowAvatarPicker(false)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  /* 图片加载完成后自动适配 */
+  const handleImageLoad = () => {
+    if (previewImgRef.current && previewCanvasRef.current) {
+      const img = previewImgRef.current
+      const canvas = previewCanvasRef.current
+      const scale = Math.min(canvas.clientWidth / img.naturalWidth, canvas.clientHeight / img.naturalHeight, 1)
+      setZoom(scale)
+      setPan({ x: 0, y: 0 })
+    }
+  }
+
+  /* 拖拽相关 */
+  const handleDragStart = (e) => {
+    setIsDragging(true)
+    const pos = e.touches ? e.touches[0] : e
+    dragStartRef.current = { x: pos.clientX - pan.x, y: pos.clientY - pan.y }
+  }
+  const handleDrag = (e) => {
+    if (!isDragging) return
+    e.preventDefault()
+    const pos = e.touches ? e.touches[0] : e
+    setPan({ x: pos.clientX - dragStartRef.current.x, y: pos.clientY - dragStartRef.current.y })
+  }
+  const handleDragEnd = () => setIsDragging(false)
+  const handleTouchStart = (e) => { if (e.touches.length === 1) handleDragStart(e) }
+  const handleTouchMove = (e) => { if (e.touches.length === 1) handleDrag(e) }
+  const handleTouchEnd = handleDragEnd
+
+  /* 确认图片头像 */
+  const handleConfirmImage = async () => {
+    if (!previewImage || !previewCanvasRef.current) return
+    try {
+      const canvas = document.createElement('canvas')
+      const size = 200
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+
+      const img = previewImgRef.current
+      const canvasEl = previewCanvasRef.current
+      const canvasW = canvasEl.clientWidth
+      const canvasH = canvasEl.clientHeight
+
+      const imgW = img.naturalWidth * zoom
+      const imgH = img.naturalHeight * zoom
+      const imgX = (canvasW - imgW) / 2 + pan.x
+      const imgY = (canvasH - imgH) / 2 + pan.y
+
+      const cropSize = Math.min(canvasW, canvasH)
+      const cropX = (canvasW - cropSize) / 2
+      const cropY = (canvasH - cropSize) / 2
+
+      ctx.drawImage(img,
+        (cropX - imgX) / zoom, (cropY - imgY) / zoom, cropSize / zoom, cropSize / zoom,
+        0, 0, size, size
+      )
+
+      const base64 = canvas.toDataURL('image/jpeg', 0.85)
+
+      const res = await fetch(`${API.user}/avatar/upload`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ avatar: base64 }),
+      })
+      if (res.ok) {
+        await refreshProfile()
+        setPreviewImage(null)
+      }
+    } catch (err) {
+      console.error('上传头像失败:', err)
+      alert('上传失败，请重试')
     }
   }
 
@@ -419,103 +555,72 @@ function UserProfile() {
 
   const displayName = user.nickname || user.username
   const initial = displayName[0].toUpperCase()
-  const avatarDisplay = user.avatar || initial
+
+  /* 判断头像类型：emoji 还是图片 */
+  const isEmojiAvatar = user.avatar && !user.avatar.startsWith('/') && !user.avatar.startsWith('http') && !user.avatar.startsWith('data:')
 
   return (
     <div className="user-page">
       {/* 用户信息卡片 */}
       <div className="user-info-card">
-        <div
-          className="user-avatar"
-          style={{ cursor: 'pointer', position: 'relative', fontSize: user.avatar ? '32px' : undefined }}
-          onClick={() => setShowAvatarPicker(true)}
-          title="点击更换头像"
-        >
-          {avatarDisplay}
-          <div style={{
-            position: 'absolute',
-            bottom: '-2px',
-            right: '-2px',
-            width: '18px',
-            height: '18px',
-            borderRadius: '50%',
-            background: 'var(--primary)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '2px solid var(--card-bg)',
-          }}>
-            <Camera size={10} />
+        {/* 头像区域 */}
+        <div className="user-avatar-section">
+          <div className="user-avatar-large" onClick={() => setShowAvatarPicker(true)}>
+            {isEmojiAvatar ? (
+              <span className="user-avatar-emoji">{user.avatar}</span>
+            ) : user.avatar ? (
+              <img src={user.avatar} alt="头像" className="user-avatar-img" />
+            ) : (
+              <span className="user-avatar-initial">{initial}</span>
+            )}
+            <div className="user-avatar-edit-badge">
+              <Camera size={12} />
+            </div>
           </div>
         </div>
 
-        {/* 头像选择器 */}
-        {showAvatarPicker && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }} onClick={() => setShowAvatarPicker(false)}>
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                background: 'var(--card-bg)',
-                borderRadius: '16px',
-                padding: '20px',
-                maxWidth: '320px',
-                width: '90%',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-              }}
-            >
-              <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', textAlign: 'center' }}>
-                选择头像
-              </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '8px',
-              }}>
-                {avatarOptions.map((emoji) => (
-                  <div
-                    key={emoji}
-                    onClick={() => handleAvatarChange(emoji)}
-                    style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '24px',
-                      cursor: 'pointer',
-                      background: user.avatar === emoji ? '#EEF2FF' : 'var(--bg-secondary)',
-                      border: user.avatar === emoji ? '2px solid var(--primary)' : '2px solid transparent',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {emoji}
-                  </div>
-                ))}
-              </div>
+        {/* 昵称显示和编辑 */}
+        <div className="user-nickname-row">
+          <span className="user-display-name">{displayName}</span>
+          <button className="user-edit-nickname-btn" onClick={() => setEditingNickname(true)}>
+            <Pencil size={14} />
+          </button>
+        </div>
+
+        {/* 昵称编辑表单 */}
+        {editingNickname && (
+          <div className="user-nickname-edit">
+            <input
+              type="text"
+              value={nicknameInput}
+              onChange={(e) => setNicknameInput(e.target.value)}
+              placeholder="输入新昵称"
+              maxLength={30}
+              className="user-nickname-input"
+              autoFocus
+            />
+            <div className="user-nickname-actions">
+              <button className="user-nickname-cancel" onClick={() => { setEditingNickname(false); setNicknameInput(user.nickname || '') }}>取消</button>
+              <button className="user-nickname-save" onClick={handleSaveNickname}>保存</button>
             </div>
           </div>
         )}
-        <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
-          {displayName}
-        </div>
+
+        {/* 真实姓名和专业年级（从教务系统同步） */}
+        {user.real_name && (
+          <div className="user-real-info">
+            <span className="user-real-name">{user.real_name}</span>
+            {user.major_grade && <span className="user-major-grade">{user.major_grade}</span>}
+          </div>
+        )}
+
+        {/* 用户名显示 */}
         {user.nickname && (
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
             @{user.username}
           </div>
         )}
+
         {/* 角色标签 */}
         {user.role && (
           <span className={`admin-badge ${user.role}`} style={{ marginTop: '8px' }}>
@@ -523,6 +628,90 @@ function UserProfile() {
           </span>
         )}
       </div>
+
+      {/* 头像选择器弹窗 */}
+      {showAvatarPicker && (
+        <div className="avatar-picker-overlay" onClick={() => setShowAvatarPicker(false)}>
+          <div className="avatar-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="avatar-picker-header">
+              <span>选择头像</span>
+              <button onClick={() => setShowAvatarPicker(false)}><X size={20} /></button>
+            </div>
+
+            {/* 上传图片按钮 */}
+            <div className="avatar-upload-section">
+              <label className="avatar-upload-btn">
+                <Camera size={20} />
+                <span>上传图片</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleImageSelect}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
+            {/* Emoji 选择 */}
+            <div className="avatar-emoji-label">或选择表情</div>
+            <div className="avatar-emoji-grid">
+              {AVATAR_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  className={`avatar-emoji-item ${user.avatar === emoji ? 'active' : ''}`}
+                  onClick={() => handleSelectEmoji(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 图片预览和裁剪弹窗 */}
+      {previewImage && (
+        <div className="image-preview-overlay">
+          <div className="image-preview-modal">
+            <div className="image-preview-header">
+              <span>预览头像</span>
+              <button onClick={() => setPreviewImage(null)}><X size={20} /></button>
+            </div>
+            <div className="image-preview-canvas-wrapper">
+              <div className="image-preview-canvas" ref={previewCanvasRef}>
+                <img
+                  src={previewImage}
+                  alt="预览"
+                  ref={previewImgRef}
+                  onLoad={handleImageLoad}
+                  style={{
+                    position: 'absolute',
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    cursor: isDragging ? 'grabbing' : 'grab',
+                    userSelect: 'none',
+                    maxWidth: 'none',
+                  }}
+                  onMouseDown={handleDragStart}
+                  onMouseMove={handleDrag}
+                  onMouseUp={handleDragEnd}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                />
+              </div>
+            </div>
+            <div className="image-preview-controls">
+              <button onClick={() => setZoom(z => Math.max(0.5, z - 0.2))}>缩小</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(3, z + 0.2))}>放大</button>
+            </div>
+            <button className="image-preview-confirm" onClick={handleConfirmImage}>
+              完成并应用
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 菜单列表 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>

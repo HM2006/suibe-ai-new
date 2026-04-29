@@ -44,13 +44,17 @@ function init() {
       role TEXT DEFAULT 'user',
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       last_login TEXT,
-      edu_connected INTEGER DEFAULT 0
+      edu_connected INTEGER DEFAULT 0,
+      real_name TEXT DEFAULT '',
+      major_grade TEXT DEFAULT ''
     );
   `);
 
   // 自动补齐旧表缺失的列（ALTER TABLE ADD COLUMN 如果列已存在会报错，需要忽略）
   const migrateColumns = [
     { table: 'users', column: 'avatar TEXT DEFAULT \'\'' },
+    { table: 'users', column: 'real_name TEXT DEFAULT \'\'' },
+    { table: 'users', column: 'major_grade TEXT DEFAULT \'\'' },
   ];
   for (const { table, column } of migrateColumns) {
     try {
@@ -571,6 +575,14 @@ function getUserCourseNames(userId) {
 }
 
 /**
+ * 更新用户真实姓名和专业年级（从教务系统同步）
+ */
+function updateUserEduInfo(userId, realName, majorGrade) {
+  const stmt = db.prepare('UPDATE users SET real_name = ?, major_grade = ? WHERE id = ?');
+  return stmt.run(realName, majorGrade, userId);
+}
+
+/**
  * 获取数据库实例（供需要直接操作db的模块使用）
  * @returns {Database}
  */
@@ -596,6 +608,7 @@ module.exports = {
   getUserStats,
   updateUserNickname,
   updateUserAvatar,
+  updateUserEduInfo,
   updateUserPassword,
   deleteUser,
   // 随记

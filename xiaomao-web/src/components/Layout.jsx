@@ -45,14 +45,15 @@ const sidebarNavItems = [
 /* 底部导航（移动端5项核心 + 更多） */
 const bottomNavItems = [
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
-  { path: '/campus/map', label: '导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/dashboard', label: '首页', icon: LayoutDashboard },
   { path: '/campus/news', label: '资讯', icon: Newspaper },
+  { path: '/notes', label: '随记', icon: FileText },
 ]
 
 /* "更多"面板中的功能项（底部栏未直接展示的） */
 const moreNavItems = [
+  { path: '/campus/map', label: '校园导航', icon: Map, desc: '校园地图与导航' },
   { path: '/campus/grades', label: '成绩查询', icon: BarChart3, desc: '查看各科成绩' },
   { path: '/campus/program', label: '培养方案', icon: GraduationCap, desc: '查看培养方案完成情况' },
   { path: '/mooc', label: 'MOOC助手', icon: GraduationCap, desc: '网课学习管理' },

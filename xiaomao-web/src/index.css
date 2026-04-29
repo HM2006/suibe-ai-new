@@ -3111,3 +3111,477 @@ textarea:focus-visible {
   .weather-details { gap: 8px; }
   .dashboard-card { padding: 18px; }
 }
+
+/* ========================================
+   30. Schedule Semester Info (校历信息栏)
+   ======================================== */
+.schedule-semester-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.schedule-semester-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--body-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.schedule-semester-dates {
+  font-size: var(--label-md);
+  color: var(--text-muted);
+}
+
+.schedule-semester-week-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--surface-container);
+  font-size: var(--label-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.schedule-semester-week-badge.current {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.schedule-current-tag {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .schedule-semester-info {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .schedule-semester-week-badge {
+    margin-left: 0;
+  }
+}
+
+/* ========================================
+   31. Bottom Nav Center Button (底栏首页居中)
+   ======================================== */
+.bottom-nav-list {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+}
+
+.bottom-nav-list > li:nth-child(3) .bottom-nav-link {
+  position: relative;
+  top: -8px;
+}
+
+.bottom-nav-list > li:nth-child(3) .nav-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.bottom-nav-list > li:nth-child(3) .bottom-nav-link span {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ========================================
+   32. Edu Login WeChat Button (微信跳转按钮)
+   ======================================== */
+.edu-login-wechat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: var(--radius-full);
+  background: #07C160;
+  color: white;
+  font-size: var(--body-sm);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(7, 193, 96, 0.3);
+}
+
+.edu-login-wechat-btn:hover {
+  background: #06AD56;
+  box-shadow: 0 4px 12px rgba(7, 193, 96, 0.4);
+  transform: translateY(-1px);
+}
+
+.edu-login-wechat-btn:active {
+  transform: scale(0.97);
+}
+
+/* ========================================
+   33. User Profile Enhancements (用户资料增强)
+   ======================================== */
+.user-real-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.user-real-name {
+  font-size: var(--body-md);
+  color: var(--on-surface);
+  font-weight: 500;
+}
+
+.user-major-grade {
+  font-size: var(--label-md);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  background: var(--surface-container);
+  border-radius: var(--radius-full);
+}
+
+.user-nickname-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-display-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.user-edit-nickname-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-container);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.user-edit-nickname-btn:hover {
+  background: var(--primary-container);
+  color: var(--primary);
+}
+
+.user-nickname-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.user-nickname-input {
+  padding: 8px 12px;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  font-size: var(--body-md);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  outline: none;
+}
+
+.user-nickname-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.user-nickname-cancel {
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--body-sm);
+  cursor: pointer;
+}
+
+.user-nickname-save {
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: var(--body-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.user-avatar-section {
+  position: relative;
+}
+
+.user-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  background: var(--surface-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-fast);
+  margin: 0 auto;
+}
+
+.user-avatar-large:hover {
+  transform: scale(1.05);
+}
+
+.user-avatar-emoji {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-avatar-initial {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.user-avatar-edit-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* 头像选择器弹窗 */
+.avatar-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.avatar-picker-modal {
+  background: var(--surface-container-lowest);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 70vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+
+.avatar-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: var(--title-sm);
+  font-weight: 600;
+}
+
+.avatar-picker-header button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.avatar-upload-section {
+  margin-bottom: 16px;
+}
+
+.avatar-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 2px dashed var(--outline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--primary);
+  font-size: var(--body-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.avatar-upload-btn:hover {
+  background: var(--primary-container);
+  border-color: var(--primary);
+}
+
+.avatar-emoji-label {
+  font-size: var(--label-md);
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.avatar-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.avatar-emoji-item {
+  width: 100%;
+  aspect-ratio: 1;
+  font-size: 28px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-container);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-emoji-item:hover {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+.avatar-emoji-item.active {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+/* 图片预览弹窗 */
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.2s ease;
+}
+
+.image-preview-modal {
+  background: var(--surface-container);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  width: calc(100% - 32px);
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--title-sm);
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.image-preview-header button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.image-preview-canvas-wrapper {
+  width: 100%;
+}
+
+.image-preview-canvas {
+  width: 280px;
+  height: 280px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-container-lowest);
+  position: relative;
+  touch-action: none;
+}
+
+.image-preview-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.image-preview-controls button {
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--on-surface);
+  font-size: var(--body-sm);
+  cursor: pointer;
+}
+
+.image-preview-controls span {
+  font-size: var(--label-md);
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: center;
+}
+
+.image-preview-confirm {
+  padding: 12px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  font-size: var(--body-md);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-fast);
+}
+
+.image-preview-confirm:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}

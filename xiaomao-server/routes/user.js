@@ -6,6 +6,8 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const db = require('../services/database');
 const { comparePassword, generateToken, authMiddleware } = require('../services/auth');
 const { AppError } = require('../middleware/errorHandler');
@@ -167,6 +169,8 @@ router.get('/user/profile', authMiddleware, (req, res) => {
         username: user.username,
         nickname: user.nickname,
         avatar: user.avatar || '',
+        real_name: user.real_name || '',
+        major_grade: user.major_grade || '',
         role: user.role,
         created_at: user.created_at,
         last_login: user.last_login,
@@ -259,6 +263,55 @@ router.put('/user/avatar', authMiddleware, (req, res) => {
       avatar: user.avatar,
     },
   });
+});
+
+/**
+ * PUT /api/user/avatar/upload - 上传图片头像
+ * 接收 base64 编码的图片，保存为文件，更新用户头像路径
+ */
+router.put('/user/avatar/upload', authMiddleware, (req, res) => {
+  try {
+    const { avatar } = req.body;
+    if (!avatar || typeof avatar !== 'string') {
+      return res.status(400).json({ success: false, message: '头像数据无效' });
+    }
+
+    // 验证 base64 图片格式
+    const matches = avatar.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ success: false, message: '仅支持 JPG、PNG、GIF、WebP 格式的图片' });
+    }
+
+    const ext = matches[1] === 'jpeg' || matches[1] === 'jpg' ? 'jpg' : matches[1];
+    const base64Data = matches[2];
+
+    // 限制大小（2MB）
+    if (base64Data.length > 2 * 1024 * 1024 * 1.37) {
+      return res.status(400).json({ success: false, message: '图片大小不能超过 2MB' });
+    }
+
+    // 生成文件名
+    const filename = `avatar_${req.user.userId}_${Date.now()}.${ext}`;
+    const avatarDir = path.join(__dirname, '..', 'public', 'avatars');
+
+    // 确保目录存在
+    if (!fs.existsSync(avatarDir)) {
+      fs.mkdirSync(avatarDir, { recursive: true });
+    }
+
+    // 保存文件
+    const filePath = path.join(avatarDir, filename);
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+    // 更新数据库中的头像路径
+    const avatarUrl = `/avatars/${filename}`;
+    db.updateUserAvatar(req.user.userId, avatarUrl);
+
+    res.json({ success: true, data: { avatar: avatarUrl } });
+  } catch (err) {
+    console.error('上传头像失败:', err);
+    res.status(500).json({ success: false, message: '上传头像失败' });
+  }
 });
 
 // ==================== 修改密码 ====================
