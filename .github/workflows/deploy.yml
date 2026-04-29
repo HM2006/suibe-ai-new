@@ -47,6 +47,8 @@ jobs:
             HIAGENT_API_BASE=${{ secrets.HIAGENT_API_BASE }}
             HIAGENT_API_KEY=${{ secrets.HIAGENT_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            QWEATHER_API_HOST=${{ secrets.QWEATHER_API_HOST }}
+            QWEATHER_API_KEY=${{ secrets.QWEATHER_API_KEY }}
             ENVEOF
 
             # 安装后端依赖
