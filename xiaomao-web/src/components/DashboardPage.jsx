@@ -104,16 +104,37 @@ function DashboardPage() {
     fetchWeather()
   }, [])
 
+  /* ---- 获取今日课程（从 profile 缓存中读取，与课表页面一致） ---- */
   useEffect(() => {
     const fetchSchedule = async () => {
       setScheduleLoading(true)
       try {
-        const res = await fetch(`${API.campus}/schedule/today`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        if (!token) { setScheduleLoading(false); return }
+        const res = await fetch(`${API.user}/profile`, {
+          headers: { 'Authorization': `Bearer ${token}` },
         })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success && data.data) setSchedule(data.data)
+        if (!res.ok) { setScheduleLoading(false); return }
+        const data = await res.json()
+        if (data.success && data.data?.scheduleCache) {
+          const scheduleRaw = data.data.scheduleCache.data
+          const courses = scheduleRaw?.courses || scheduleRaw || []
+          // 获取今天是星期几（0=周日, 1=周一, ..., 6=周六）
+          const today = new Date()
+          const dayIndex = today.getDay() // 0=周日
+          const dayMap = { 0: 6, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5 } // 转换为课表的 0=周一
+          const targetDay = dayMap[dayIndex]
+          // 从课表数据中筛选今天的课程
+          let todayCourses = []
+          if (Array.isArray(courses)) {
+            todayCourses = courses.filter(c => {
+              const cDay = typeof c.day === 'number' ? c.day - 1 : -1
+              return cDay === targetDay
+            })
+          } else if (typeof courses === 'object') {
+            const dayCourses = courses[targetDay] || courses[String(targetDay)]
+            if (Array.isArray(dayCourses)) todayCourses = dayCourses
+          }
+          setSchedule(todayCourses)
         }
       } catch (err) {
         console.error('获取今日课程失败:', err)
@@ -223,7 +244,6 @@ function DashboardPage() {
   }
 
   const renderScheduleCard = () => {
-    const eduConnected = user?.eduConnected
     if (scheduleLoading) {
       return (
         <div className="dashboard-card">
@@ -244,7 +264,8 @@ function DashboardPage() {
         </div>
       )
     }
-    if (!eduConnected) {
+    /* 未登录或无课表缓存 */
+    if (!token || schedule === null) {
       return (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
@@ -252,14 +273,14 @@ function DashboardPage() {
           </div>
           <div className="dashboard-empty">
             <LinkIcon size={20} />
-            <span>尚未连接教务系统</span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>连接后可查看今日课表</span>
-            <button className="dashboard-connect-btn" onClick={() => navigate('/user')}>前往连接</button>
+            <span>{!token ? '请先登录' : '尚未连接教务系统'}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{!token ? '登录后可查看今日课表' : '连接后可查看今日课表'}</span>
+            <button className="dashboard-connect-btn" onClick={() => navigate('/user')}>{!token ? '前往登录' : '前往连接'}</button>
           </div>
         </div>
       )
     }
-    const courses = Array.isArray(schedule) ? schedule : schedule?.courses || schedule?.list || []
+    const courses = Array.isArray(schedule) ? schedule : []
     if (!courses || courses.length === 0) {
       return (
         <div className="dashboard-card">

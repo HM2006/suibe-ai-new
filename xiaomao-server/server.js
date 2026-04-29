@@ -179,14 +179,14 @@ app.use('/api', eduRoutes);
 app.use('/api', userRoutes);
 app.use('/api', notesRoutes);
 
-// 管理员路由放最后（避免全局中间件拦截普通请求）
+// 天气路由（放在 admin 路由之前，避免被全局 auth 中间件拦截）
+app.use('/api', weatherRoutes);
+
+// 管理员路由（有全局 auth 中间件，必须放在普通路由之后）
 app.use('/api', adminRoutes);
 
 // 空教室路由
 // app.use('/api', emptyRoomsRoutes);
-
-// 天气路由
-app.use('/api', weatherRoutes);
 
 // ==================== SPA 路由回退 ====================
 // 所有非 API 的 GET 请求都返回 index.html，让 React Router 处理前端路由
