@@ -419,15 +419,14 @@ select {
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--bottom-nav-height);
-  background: rgba(255, 255, 255, 0.85);
+  height: calc(var(--bottom-nav-height) + 12px);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 100;
   padding: 4px 0;
   padding-bottom: env(safe-area-inset-bottom, 4px);
-  /* No border — glass effect handles separation */
-  box-shadow: 0 -4px 24px rgba(53, 37, 205, 0.04);
+  box-shadow: 0 -2px 20px rgba(53, 37, 205, 0.06);
 }
 
 .bottom-nav-list {
@@ -2370,39 +2369,60 @@ select {
   }
 
   .bottom-nav {
-    height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+    height: calc(var(--bottom-nav-height) + 12px + var(--safe-area-bottom));
     padding: 0;
     padding-bottom: var(--safe-area-bottom);
   }
 
   .bottom-nav-list {
-    justify-content: space-between;
-    padding: 0 16px;
+    justify-content: space-evenly;
+    padding: 0 8px;
+    align-items: flex-end;
   }
 
   .bottom-nav-link {
-    font-size: 9px;
-    padding: 6px 4px;
+    font-size: 10px;
+    padding: 6px 2px;
     min-width: 0;
-    flex: 1;
-    height: 100%;
+    flex: 0 1 auto;
+    height: auto;
     box-sizing: border-box;
-    max-width: 60px;
+  }
+
+  .bottom-nav-list > li {
+    flex: 1 1 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .bottom-nav-list > li:nth-child(3) {
+    flex: 0 0 auto;
   }
 
   .bottom-nav-link .nav-icon {
-    width: 20px !important;
-    height: 20px !important;
+    width: 20px;
+    height: 20px;
     min-width: 20px;
     min-height: 20px;
-    max-width: 20px;
-    max-height: 20px;
     display: block;
     flex-shrink: 0;
   }
 
+  /* 首页按钮保持突出圆形样式 */
+  .bottom-nav-list > li:nth-child(3) .nav-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+    padding: 10px;
+    box-shadow: 0 4px 14px rgba(53, 37, 205, 0.35);
+  }
+
   .page-content {
-    padding-bottom: var(--bottom-nav-height);
+    padding-bottom: calc(var(--bottom-nav-height) + 16px);
   }
 
   .top-header {
@@ -3180,15 +3200,9 @@ textarea:focus-visible {
 /* ========================================
    31. Bottom Nav Center Button (底栏首页居中)
    ======================================== */
-.bottom-nav-list {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-around;
-}
-
 .bottom-nav-list > li:nth-child(3) .bottom-nav-link {
   position: relative;
-  top: -8px;
+  top: -10px;
 }
 
 .bottom-nav-list > li:nth-child(3) .nav-icon {
@@ -3198,12 +3212,24 @@ textarea:focus-visible {
   background: linear-gradient(135deg, var(--primary), var(--primary-light));
   color: white;
   padding: 10px;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 14px rgba(53, 37, 205, 0.35);
+  transition: all var(--transition-fast);
+}
+
+.bottom-nav-list > li:nth-child(3) .bottom-nav-link:hover .nav-icon {
+  box-shadow: 0 6px 20px rgba(53, 37, 205, 0.45);
+  transform: scale(1.05);
 }
 
 .bottom-nav-list > li:nth-child(3) .bottom-nav-link span {
   font-weight: 600;
   color: var(--primary);
+}
+
+/* 更多按钮样式 */
+.bottom-nav-more .nav-icon {
+  width: 22px;
+  height: 22px;
 }
 
 /* ========================================

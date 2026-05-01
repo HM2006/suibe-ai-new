@@ -42,7 +42,7 @@ const sidebarNavItems = [
   { path: '/scholarship', label: '奖学金', icon: Award },
 ]
 
-/* 底部导航（移动端5项核心 + 更多） */
+/* 底部导航（移动端5项，首页居中） */
 const bottomNavItems = [
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
@@ -185,7 +185,7 @@ function Layout({ children }) {
           ))}
 
           {/* 更多功能按钮 */}
-          <li>
+          <li className="bottom-nav-more">
             <button
               className={`bottom-nav-link more-btn ${showMore ? 'active' : ''}`}
               onClick={() => setShowMore(true)}
