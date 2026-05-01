@@ -292,6 +292,22 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
       }
       programSaved = true;
       console.log(`[EduRoute] 培养方案完成情况数据已获取并缓存，模块数: ${programData.modules?.length || 0}`);
+
+      /* 从培养方案中提取学生姓名和专业（比成绩API更可靠） */
+      const studentInfo = eduProxy.getStudentInfo();
+      if (!studentInfo.studentName && programData.student?.name) {
+        eduProxy.studentName = programData.student.name;
+        console.log(`[EduRoute] 从培养方案获取到学生姓名: ${programData.student.name}`);
+      }
+      if (!studentInfo.studentMajor) {
+        const programName = programData.program?.nameZh || '';
+        const programGrade = programData.program?.grade || '';
+        if (programName) {
+          const majorStr = programGrade ? `${programGrade}级 ${programName}` : programName;
+          eduProxy.studentMajor = majorStr;
+          console.log(`[EduRoute] 从培养方案获取到专业年级: ${majorStr}`);
+        }
+      }
     }
   } catch (programErr) {
     console.warn('[EduRoute] 获取培养方案完成情况失败（不影响其他数据同步）:', programErr.message);
@@ -320,6 +336,8 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
         studentInfo.studentMajor || ''
       );
       console.log(`[EduRoute] 学生信息已保存: ${studentInfo.studentName}, ${studentInfo.studentMajor}`);
+    } else {
+      console.warn('[EduRoute] 未能获取到学生姓名和专业信息');
     }
   } catch (e) {
     console.warn('[EduRoute] 保存学生信息失败:', e.message);

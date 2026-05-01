@@ -620,17 +620,28 @@ function UserProfile() {
           </div>
         )}
 
-        {/* 真实姓名和专业年级（从教务系统同步） */}
+        {/* 真实姓名和专业年级（从教务系统同步） - 两栏布局 */}
         {(user.edu_name || user.edu_major_grade) ? (
           <div className="user-real-info">
-            {user.edu_name && <span className="user-real-name">{user.edu_name}</span>}
-            {user.edu_major_grade && <span className="user-major-grade">{user.edu_major_grade}</span>}
+            {user.edu_name && (
+              <div className="user-real-info-item">
+                <span className="user-real-info-label">姓名</span>
+                <span className="user-real-info-value">{user.edu_name}</span>
+              </div>
+            )}
+            {user.edu_name && user.edu_major_grade && (
+              <div style={{ width: '1px', height: '28px', background: 'var(--outline-variant)' }} />
+            )}
+            {user.edu_major_grade && (
+              <div className="user-real-info-item">
+                <span className="user-real-info-label">专业年级</span>
+                <span className="user-real-info-value">{user.edu_major_grade}</span>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="user-real-info">
-            <span className="user-major-grade" style={{ opacity: 0.6, fontSize: '11px' }}>
-              {user.eduConnected ? '暂无教务数据' : '未连接教务系统，暂无身份信息'}
-            </span>
+          <div className="user-real-info-placeholder">
+            {user.eduConnected ? '暂无教务数据' : '未连接教务系统，暂无身份信息'}
           </div>
         )}
 

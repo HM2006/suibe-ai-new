@@ -348,42 +348,47 @@ function ChatPage() {
         { id: aiMessageId, role: 'assistant', content: '', recordId: null },
       ])
 
-      const headers = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const response = await fetch(`${API.chat}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: messageText }],
-          conversation_id: null,
-        }),
-      })
+      const streamUrl = `${API.chat}/stream?query=${encodeURIComponent(messageText)}`
+      const response = await fetch(streamUrl)
 
       if (!response.ok) {
         throw new Error(`请求失败: ${response.status}`)
       }
 
-      const contentType = response.headers.get('content-type') || ''
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
+      let buffer = ''
+      let firstChunkReceived = false
 
-      if (contentType.includes('text/event-stream')) {
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let fullContent = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') continue
-              try {
-                const parsed = JSON.parse(data)
-                const content = parsed.answer || parsed.content || parsed.delta || ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+
+          if (trimmed.startsWith('event: done')) {
+            continue
+          }
+
+          if (trimmed.startsWith('data: ')) {
+            const dataStr = trimmed.slice(6)
+            if (dataStr === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(dataStr)
+              if (parsed.status === 'connected') continue
+              const content = parsed.answer || parsed.content || ''
+              if (content) {
+                if (!firstChunkReceived) {
+                  firstChunkReceived = true
+                  stopLoadingAnimation()
+                }
                 fullContent += content
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -392,31 +397,55 @@ function ChatPage() {
                       : msg
                   )
                 )
-              } catch {
-                fullContent += data
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: fullContent }
-                      : msg
-                  )
-                )
               }
+            } catch {
+               if (!firstChunkReceived) {
+                 firstChunkReceived = true
+                 stopLoadingAnimation()
+               }
+              fullContent += dataStr
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId
+                    ? { ...msg, content: fullContent }
+                    : msg
+                )
+              )
             }
           }
         }
-      } else {
-        const data = await response.json()
-        const aiContent = data.data?.answer || data.answer || data.reply || '抱歉，我暂时无法理解你的问题。'
-        const recordId = data.data?.record_id || null
+      }
+
+      if (!fullContent) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessageId
-              ? { ...msg, content: aiContent, recordId }
+              ? { ...msg, content: '抱歉，我暂时无法理解你的问题。' }
               : msg
           )
         )
       }
+
+      const recordHeaders = { 'Content-Type': 'application/json' }
+      if (token) recordHeaders['Authorization'] = `Bearer ${token}`
+      try {
+        const saveRes = await fetch(`${API.chat}/save`, {
+          method: 'POST',
+          headers: recordHeaders,
+          body: JSON.stringify({ user_message: messageText, ai_answer: fullContent }),
+        })
+        const saveData = await saveRes.json()
+        if (saveData.data?.record_id) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, recordId: saveData.data.record_id }
+                : msg
+            )
+          )
+        }
+      } catch { /* 保存记录失败不影响主流程 */ }
+
     } catch (error) {
       console.error('发送消息失败:', error)
       setMessages((prev) => {

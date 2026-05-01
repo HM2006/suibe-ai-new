@@ -3240,22 +3240,34 @@ textarea:focus-visible {
 .user-real-info {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
 }
 
-.user-real-name {
-  font-size: var(--body-md);
+.user-real-info-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.user-real-info-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.user-real-info-value {
+  font-size: 14px;
   color: var(--on-surface);
   font-weight: 500;
 }
 
-.user-major-grade {
-  font-size: var(--label-md);
+.user-real-info-placeholder {
+  font-size: 12px;
   color: var(--text-muted);
-  padding: 2px 8px;
-  background: var(--surface-container);
-  border-radius: var(--radius-full);
+  margin-top: 8px;
+  text-align: center;
 }
 
 .user-nickname-row {
