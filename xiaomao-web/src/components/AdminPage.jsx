@@ -9,7 +9,8 @@ import { useUser } from '../contexts/UserContext'
 import {
   Shield, Users, BarChart3, ArrowLeft, RefreshCw,
   Calendar, BookOpen, Activity, Clock, UserPlus,
-  Trash2, Eye, Server, Database, Cpu
+  Trash2, Eye, Server, Database, Cpu,
+  MessageSquare, ThumbsUp, ThumbsDown
 } from 'lucide-react'
 import { API } from '../config/api'
 
@@ -184,6 +185,173 @@ function UserStatsPanel({ userId, username, onBack }) {
 }
 
 /**
+ * 对话记录面板
+ */
+function ChatRecordsPanel() {
+  const { token } = useUser()
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [filterUserId, setFilterUserId] = useState('')
+  const pageSize = 15
+
+  const fetchRecords = async (p = page) => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ page: p, pageSize })
+      if (filterUserId) params.append('userId', filterUserId)
+      const res = await fetch(`${API.admin}/chat-records?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.success && data.data) {
+        setRecords(data.data.records || [])
+        setTotal(data.data.total || 0)
+      }
+    } catch {
+      console.error('获取对话记录失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchRecords(1) }, [filterUserId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalPages = Math.ceil(total / pageSize)
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage)
+    fetchRecords(newPage)
+  }
+
+  const handleDeleteRecord = async (recordId) => {
+    if (!confirm('确定删除这条对话记录？')) return
+    try {
+      const res = await fetch(`${API.admin}/chat-records/${recordId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.success) {
+        fetchRecords(page)
+      }
+    } catch {
+      alert('删除失败')
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="按用户ID筛选..."
+          value={filterUserId}
+          onChange={(e) => setFilterUserId(e.target.value)}
+          style={{
+            padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--card-border)',
+            background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '13px',
+            width: '160px', outline: 'none',
+          }}
+        />
+        <button
+          onClick={() => { setPage(1); fetchRecords(1) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '8px 12px', borderRadius: '8px',
+            border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+            color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer',
+          }}
+        >
+          <RefreshCw size={12} /> 刷新
+        </button>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>共 {total} 条记录</span>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+          <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
+          <div style={{ marginTop: '8px', fontSize: '13px' }}>加载中...</div>
+        </div>
+      )}
+
+      {!loading && records.length === 0 && (
+        <div className="chat-record-empty">暂无对话记录</div>
+      )}
+
+      {!loading && records.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {records.map(record => (
+            <div key={record.id} className="chat-record-card">
+              <div className="chat-record-header">
+                <div className="chat-record-user">
+                  <div className="chat-record-user-avatar">
+                    {(record.nickname || record.username || '?')[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="chat-record-user-name">{record.nickname || record.username || '匿名用户'}</div>
+                    <div className="chat-record-user-id">用户ID: {record.user_id || '-'}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {record.reaction && (
+                    <span className={`chat-record-reaction ${record.reaction}`}>
+                      {record.reaction === 'like' ? <><ThumbsUp size={11} /> 赞</> : <><ThumbsDown size={11} /> 踩</>}
+                    </span>
+                  )}
+                  <span className="chat-record-time">{formatDateTime(record.created_at)}</span>
+                </div>
+              </div>
+              <div className="chat-record-body">
+                <div className="chat-record-msg user">
+                  {record.user_message?.length > 200 ? record.user_message.slice(0, 200) + '...' : record.user_message}
+                </div>
+                <div className="chat-record-msg assistant">
+                  {record.ai_answer?.length > 300 ? record.ai_answer.slice(0, 300) + '...' : record.ai_answer}
+                </div>
+              </div>
+              <div className="chat-record-footer">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {record.reaction === 'like' && (
+                    <span style={{ fontSize: '11px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <ThumbsUp size={11} /> 用户点赞
+                    </span>
+                  )}
+                  {record.reaction === 'dislike' && (
+                    <span style={{ fontSize: '11px', color: 'var(--error)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <ThumbsDown size={11} /> 用户踩
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleDeleteRecord(record.id)}
+                  style={{
+                    background: 'none', border: 'none', color: '#EF4444',
+                    fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                  }}
+                >
+                  <Trash2 size={12} /> 删除
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {totalPages > 1 && (
+            <div className="chat-record-pagination">
+              <button onClick={() => handlePageChange(page - 1)} disabled={page <= 1}>上一页</button>
+              <span>{page} / {totalPages}</span>
+              <button onClick={() => handlePageChange(page + 1)} disabled={page >= totalPages}>下一页</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * 管理后台主页面
  */
 function AdminPage() {
@@ -327,6 +495,7 @@ function AdminPage() {
   const tabs = [
     { key: 'overview', label: '概览', icon: BarChart3 },
     { key: 'users', label: '用户管理', icon: Users },
+    { key: 'chatrecords', label: '对话记录', icon: MessageSquare },
   ]
 
   return (
@@ -546,6 +715,11 @@ function AdminPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* 对话记录 Tab */}
+      {activeTab === 'chatrecords' && (
+        <ChatRecordsPanel />
       )}
     </div>
   )

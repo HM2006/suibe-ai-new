@@ -187,6 +187,20 @@ function init() {
     );
   `);
 
+  // 创建对话记录表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER DEFAULT NULL,
+      username TEXT DEFAULT 'anonymous',
+      user_message TEXT NOT NULL,
+      ai_answer TEXT NOT NULL DEFAULT '',
+      reaction TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
   console.log('[DB] 数据库表初始化完成');
 }
 
@@ -583,6 +597,72 @@ function updateUserEduInfo(userId, realName, majorGrade) {
 }
 
 /**
+ * 保存对话记录
+ */
+function saveChatRecord(userId, username, userMessage, aiAnswer) {
+  const stmt = db.prepare(
+    "INSERT INTO chat_records (user_id, username, user_message, ai_answer) VALUES (?, ?, ?, ?)"
+  );
+  const result = stmt.run(userId || null, username || 'anonymous', userMessage, aiAnswer || '');
+  return result.lastInsertRowid;
+}
+
+/**
+ * 更新对话记录的AI回复
+ */
+function updateChatRecordAnswer(recordId, aiAnswer) {
+  const stmt = db.prepare('UPDATE chat_records SET ai_answer = ? WHERE id = ?');
+  stmt.run(aiAnswer, recordId);
+}
+
+/**
+ * 更新对话记录的反馈（赞/踩）
+ */
+function updateChatRecordReaction(recordId, reaction) {
+  const stmt = db.prepare('UPDATE chat_records SET reaction = ? WHERE id = ?');
+  stmt.run(reaction, recordId);
+}
+
+/**
+ * 获取所有对话记录（管理后台用）
+ */
+function getAllChatRecords({ page = 1, pageSize = 20, userId: filterUserId } = {}) {
+  const offset = (page - 1) * pageSize;
+  let whereClause = '';
+  let params = [];
+
+  if (filterUserId) {
+    whereClause = 'WHERE user_id = ?';
+    params = [filterUserId];
+  }
+
+  const countStmt = db.prepare(`SELECT COUNT(*) as total FROM chat_records ${whereClause}`);
+  const total = countStmt.get(...params).total;
+
+  const dataStmt = db.prepare(
+    `SELECT cr.*, u.nickname FROM chat_records cr LEFT JOIN users u ON cr.user_id = u.id ${whereClause} ORDER BY cr.id DESC LIMIT ? OFFSET ?`
+  );
+  const records = dataStmt.all(...params, pageSize, offset);
+
+  return { records, total, page, pageSize };
+}
+
+/**
+ * 获取指定用户的对话记录
+ */
+function getUserChatRecords(userId, { page = 1, pageSize = 20 } = {}) {
+  return getAllChatRecords({ page, pageSize, userId });
+}
+
+/**
+ * 删除对话记录
+ */
+function deleteChatRecord(recordId) {
+  const result = db.prepare('DELETE FROM chat_records WHERE id = ?').run(recordId);
+  return result.changes > 0;
+}
+
+/**
  * 获取数据库实例（供需要直接操作db的模块使用）
  * @returns {Database}
  */
@@ -622,4 +702,11 @@ module.exports = {
   getNoteAttachmentsWithData,
   deleteAttachment,
   getUserCourseNames,
+  // 对话记录
+  saveChatRecord,
+  updateChatRecordAnswer,
+  updateChatRecordReaction,
+  getAllChatRecords,
+  getUserChatRecords,
+  deleteChatRecord,
 };

@@ -773,18 +773,6 @@ select {
 }
 
 /* ── Chat Input Area (Floating Pill) ── */
-.chat-input-area {
-  padding: 16px 32px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-  /* No border — glass effect creates separation */
-  box-shadow: 0 -4px 24px rgba(53, 37, 205, 0.04);
-}
-
 .chat-input-wrapper {
   flex: 1;
   position: relative;
@@ -3592,4 +3580,483 @@ textarea:focus-visible {
 .image-preview-confirm:hover {
   box-shadow: var(--shadow-lg);
   transform: translateY(-1px);
+}
+
+/* ========================================
+   34. Capsule Input Box (胶囊输入框)
+   ======================================== */
+.chat-input-area {
+  padding: 12px 16px 16px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: none;
+  position: relative;
+}
+
+.chat-input-capsule {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--surface-container-lowest);
+  border-radius: var(--radius-full);
+  padding: 4px 4px 4px 20px;
+  box-shadow: 0 2px 16px rgba(53, 37, 205, 0.08), 0 0 0 1px rgba(196, 198, 208, 0.15);
+  transition: box-shadow var(--transition-normal), background var(--transition-normal);
+  position: relative;
+  z-index: 10;
+}
+
+.chat-input-capsule:focus-within {
+  box-shadow: 0 4px 24px rgba(53, 37, 205, 0.12), 0 0 0 2px rgba(53, 37, 205, 0.1);
+  background: #fff;
+}
+
+.chat-input-capsule .chat-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  min-height: 44px;
+  max-height: 100px;
+  resize: none;
+  outline: none;
+  font-size: var(--body-lg);
+  color: var(--on-surface);
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+.chat-input-capsule .chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+.chat-input-capsule .chat-input:focus {
+  background: transparent;
+  box-shadow: none;
+}
+
+.send-btn-inside {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(53, 37, 205, 0.2);
+}
+
+.send-btn-inside:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 14px rgba(53, 37, 205, 0.3);
+}
+
+.send-btn-inside:disabled {
+  background: var(--surface-container-high);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ========================================
+   35. Preset Questions (预设问题浮动文字框)
+   ======================================== */
+.preset-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: 0 4px;
+  animation: slideUp 0.4s ease;
+}
+
+.preset-question-chip {
+  padding: 8px 16px;
+  background: var(--surface-container-lowest);
+  border: 1px solid rgba(196, 198, 208, 0.2);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 4px rgba(53, 37, 205, 0.04);
+  line-height: 1.5;
+}
+
+.preset-question-chip:hover {
+  color: var(--primary);
+  background: var(--primary-container);
+  border-color: rgba(53, 37, 205, 0.15);
+  box-shadow: 0 2px 8px rgba(53, 37, 205, 0.08);
+  transform: translateY(-1px);
+}
+
+.preset-question-chip:active {
+  transform: scale(0.97);
+}
+
+.preset-question-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ========================================
+   36. Message Actions (复制、重新生成、赞踩)
+   ======================================== */
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  margin-left: 2px;
+}
+
+.message:hover .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+}
+
+.msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.msg-action-btn:hover {
+  background: var(--surface-container);
+  color: var(--text-secondary);
+}
+
+.msg-action-btn.active.like {
+  color: var(--primary);
+  background: var(--primary-container);
+}
+
+.msg-action-btn.active.dislike {
+  color: var(--error);
+  background: var(--error-container);
+}
+
+.msg-action-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--outline-variant);
+  margin: 0 4px;
+  opacity: 0.5;
+}
+
+/* ========================================
+   37. Loading Animation (检索知识库 -> 编辑回答)
+   ======================================== */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.loading-indicator.with-text {
+  padding: 6px 0;
+}
+
+.loading-text-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.loading-text-stage.fade-in {
+  animation: loadingStageFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes loadingStageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loading-dots-small {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.loading-dots-small span {
+  width: 5px;
+  height: 5px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: loadingDotPulse 1.2s ease-in-out infinite;
+}
+
+.loading-dots-small span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.loading-dots-small span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes loadingDotPulse {
+  0%, 80%, 100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.loading-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color 0.5s ease, opacity 0.5s ease;
+}
+
+.loading-label.editing {
+  color: var(--text-secondary);
+}
+
+/* ========================================
+   38. Chat Records Admin (管理后台对话记录)
+   ======================================== */
+.chat-record-card {
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  transition: box-shadow var(--transition-fast);
+}
+
+.chat-record-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.chat-record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.chat-record-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-record-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #EEF2FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.chat-record-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-record-user-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-record-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-record-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-record-msg {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chat-record-msg.user {
+  background: #F3F4F6;
+  color: var(--text-primary);
+}
+
+.chat-record-msg.user::before {
+  content: '用户提问：';
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+
+.chat-record-msg.assistant {
+  background: #EEF2FF;
+  color: var(--on-primary-container);
+}
+
+.chat-record-msg.assistant::before {
+  content: 'AI回答：';
+  font-weight: 600;
+  color: var(--primary);
+  margin-right: 4px;
+}
+
+.chat-record-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chat-record-reaction.like {
+  background: var(--primary-container);
+  color: var(--primary);
+}
+
+.chat-record-reaction.dislike {
+  background: var(--error-container);
+  color: var(--error);
+}
+
+.chat-record-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.chat-record-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.chat-record-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.chat-record-pagination button {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chat-record-pagination button:hover:not(:disabled) {
+  background: var(--primary-container);
+  color: var(--primary);
+}
+
+.chat-record-pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-record-pagination span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ========================================
+   39. Chat Input Area Override (Mobile)
+   ======================================== */
+@media (max-width: 768px) {
+  .chat-input-area {
+    padding: 10px 16px 14px;
+    padding-bottom: calc(14px + var(--safe-area-bottom));
+    gap: 8px;
+  }
+
+  .chat-input-capsule {
+    padding: 3px 3px 3px 16px;
+  }
+
+  .chat-input-capsule .chat-input {
+    font-size: 16px;
+    min-height: 40px;
+  }
+
+  .send-btn-inside {
+    width: 36px;
+    height: 36px;
+  }
+
+  .preset-questions {
+    gap: 6px;
+  }
+
+  .preset-question-chip {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .message-actions {
+    opacity: 1;
+  }
+
+  .msg-action-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
 }

@@ -329,8 +329,9 @@ function UserProfile() {
   /* 图片上传相关状态 */
   const [previewImage, setPreviewImage] = useState(null)
   const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
+  const panRef = useRef({ x: 0, y: 0 })
+  const [panState, setPanState] = useState({ x: 0, y: 0 })
+  const isDraggingRef = useRef(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
   const previewCanvasRef = useRef(null)
   const previewImgRef = useRef(null)
@@ -399,7 +400,8 @@ function UserProfile() {
     reader.onload = (ev) => {
       setPreviewImage(ev.target.result)
       setZoom(1)
-      setPan({ x: 0, y: 0 })
+      panRef.current = { x: 0, y: 0 }
+      setPanState({ x: 0, y: 0 })
       setShowAvatarPicker(false)
     }
     reader.readAsDataURL(file)
@@ -412,26 +414,36 @@ function UserProfile() {
       const canvas = previewCanvasRef.current
       const scale = Math.min(canvas.clientWidth / img.naturalWidth, canvas.clientHeight / img.naturalHeight, 1)
       setZoom(scale)
-      setPan({ x: 0, y: 0 })
+      panRef.current = { x: 0, y: 0 }
+      setPanState({ x: 0, y: 0 })
     }
   }
 
   /* 拖拽相关 */
   const handleDragStart = (e) => {
-    setIsDragging(true)
+    isDraggingRef.current = true
     const pos = e.touches ? e.touches[0] : e
-    dragStartRef.current = { x: pos.clientX - pan.x, y: pos.clientY - pan.y }
+    dragStartRef.current = { x: pos.clientX - panRef.current.x, y: pos.clientY - panRef.current.y }
+    const onMove = (ev) => {
+      if (!isDraggingRef.current) return
+      ev.preventDefault()
+      const p = ev.touches ? ev.touches[0] : ev
+      const newPan = { x: p.clientX - dragStartRef.current.x, y: p.clientY - dragStartRef.current.y }
+      panRef.current = newPan
+      setPanState(newPan)
+    }
+    const onUp = () => {
+      isDraggingRef.current = false
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+    window.addEventListener('mousemove', onMove, { passive: false })
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
   }
-  const handleDrag = (e) => {
-    if (!isDragging) return
-    e.preventDefault()
-    const pos = e.touches ? e.touches[0] : e
-    setPan({ x: pos.clientX - dragStartRef.current.x, y: pos.clientY - dragStartRef.current.y })
-  }
-  const handleDragEnd = () => setIsDragging(false)
-  const handleTouchStart = (e) => { if (e.touches.length === 1) handleDragStart(e) }
-  const handleTouchMove = (e) => { if (e.touches.length === 1) handleDrag(e) }
-  const handleTouchEnd = handleDragEnd
 
   /* 确认图片头像 */
   const handleConfirmImage = async () => {
@@ -450,8 +462,8 @@ function UserProfile() {
 
       const imgW = img.naturalWidth * zoom
       const imgH = img.naturalHeight * zoom
-      const imgX = (canvasW - imgW) / 2 + pan.x
-      const imgY = (canvasH - imgH) / 2 + pan.y
+      const imgX = (canvasW - imgW) / 2 + panRef.current.x
+      const imgY = (canvasH - imgH) / 2 + panRef.current.y
 
       const cropSize = Math.min(canvasW, canvasH)
       const cropX = (canvasW - cropSize) / 2
@@ -607,10 +619,10 @@ function UserProfile() {
         )}
 
         {/* 真实姓名和专业年级（从教务系统同步） */}
-        {user.real_name && (
+        {(user.edu_name || user.edu_major_grade) && (
           <div className="user-real-info">
-            <span className="user-real-name">{user.real_name}</span>
-            {user.major_grade && <span className="user-major-grade">{user.major_grade}</span>}
+            {user.edu_name && <span className="user-real-name">{user.edu_name}</span>}
+            {user.edu_major_grade && <span className="user-major-grade">{user.edu_major_grade}</span>}
           </div>
         )}
 
@@ -686,18 +698,14 @@ function UserProfile() {
                   onLoad={handleImageLoad}
                   style={{
                     position: 'absolute',
-                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transform: `translate(${panState.x}px, ${panState.y}px) scale(${zoom})`,
                     transformOrigin: 'center center',
-                    cursor: isDragging ? 'grabbing' : 'grab',
+                    cursor: isDraggingRef.current ? 'grabbing' : 'grab',
                     userSelect: 'none',
                     maxWidth: 'none',
                   }}
                   onMouseDown={handleDragStart}
-                  onMouseMove={handleDrag}
-                  onMouseUp={handleDragEnd}
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
+                  onTouchStart={handleDragStart}
                 />
               </div>
             </div>

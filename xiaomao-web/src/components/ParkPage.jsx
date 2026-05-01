@@ -3,9 +3,8 @@
    Canvas校园地图 + 点击记录停车位置
    ======================================== */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Car, Trash2 } from 'lucide-react'
+import { Car, Trash2, MapPin, Clock, ChevronRight } from 'lucide-react'
 
-// 地图区块比例布局 (0-100 相对坐标)
 const LAYOUT = {
   buildX_start: 28,
   buildX_end: 72,
@@ -55,13 +54,32 @@ function calculateLocationName(x, y) {
   }
 }
 
+function formatParkedTime(isoStr) {
+  const parked = new Date(isoStr)
+  const now = new Date()
+  const parkedDate = new Date(parked.getFullYear(), parked.getMonth(), parked.getDate())
+  const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffDays = Math.floor((nowDate - parkedDate) / (1000 * 60 * 60 * 24))
+
+  const timeStr = `${parked.getHours().toString().padStart(2, '0')}:${parked.getMinutes().toString().padStart(2, '0')}`
+  const dateStr = `${parked.getMonth() + 1}月${parked.getDate()}日`
+
+  if (diffDays === 0) {
+    return { dateLabel: '今天', timeStr, fullText: `今天 ${timeStr}` }
+  } else if (diffDays === 1) {
+    return { dateLabel: '昨天', timeStr, fullText: `昨天 ${timeStr}` }
+  } else {
+    return { dateLabel, timeStr, fullText: `${dateStr} ${timeStr}` }
+  }
+}
+
 function ParkPage() {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const [marker, setMarker] = useState(null)
   const [animating, setAnimating] = useState(false)
+  const [parkDuration, setParkDuration] = useState('')
 
-  // 加载缓存
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -69,7 +87,24 @@ function ParkPage() {
     } catch { /* ignore */ }
   }, [])
 
-  // 绘制地图
+  useEffect(() => {
+    if (!marker?.isoTime) return
+    const update = () => {
+      const ms = Date.now() - new Date(marker.isoTime).getTime()
+      if (ms < 0) { setParkDuration(''); return }
+      const hrs = Math.floor(ms / 3600000)
+      const mins = Math.floor((ms % 3600000) / 60000)
+      if (hrs > 0) {
+        setParkDuration(`已停放 ${hrs} 小时 ${mins} 分钟`)
+      } else {
+        setParkDuration(`已停放 ${mins} 分钟`)
+      }
+    }
+    update()
+    const timer = setInterval(update, 30000)
+    return () => clearInterval(timer)
+  }, [marker?.isoTime])
+
   const drawMap = useCallback(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -86,21 +121,18 @@ function ParkPage() {
     const w = rect.width
     const h = rect.height
 
-    // 背景
     ctx.clearRect(0, 0, w, h)
 
-    // 方向提示
     ctx.fillStyle = '#9CA3AF'
-    ctx.font = 'bold 18px sans-serif'
+    ctx.font = 'bold 16px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('前', w * 0.14, h * 0.5)
     ctx.fillText('后', w * 0.86, h * 0.5)
-    ctx.font = '13px sans-serif'
+    ctx.font = '12px sans-serif'
     ctx.fillText('侧边', w * 0.5, h * 0.04)
     ctx.fillText('南门侧', w * 0.5, h * 0.97)
 
-    // 绘制楼栋
     const drawBuilding = (block) => {
       const bx = w * (LAYOUT.buildX_start / 100)
       const by = h * (block.top / 100)
@@ -114,7 +146,7 @@ function ParkPage() {
       ctx.fillRect(bx, by, bw, bh)
 
       ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 15px sans-serif'
+      ctx.font = 'bold 14px sans-serif'
       ctx.fillText(block.name, bx + bw / 2, by + bh / 2)
     }
 
@@ -123,20 +155,29 @@ function ParkPage() {
     drawBuilding(LAYOUT.SB)
     drawBuilding(LAYOUT.SA)
 
-    // 停车标记
     if (marker) {
       const px = w * (marker.x / 100)
       const py = h * (marker.y / 100)
-      ctx.font = '26px sans-serif'
-      ctx.fillText('📍', px, py - 10)
+
       ctx.beginPath()
-      ctx.arc(px, py, 4, 0, Math.PI * 2)
+      ctx.arc(px, py + 4, 16, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(220, 38, 38, 0.15)'
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.arc(px, py + 4, 8, 0, Math.PI * 2)
       ctx.fillStyle = '#dc2626'
       ctx.fill()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      ctx.font = '24px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('📍', px, py - 12)
     }
   }, [marker])
 
-  // 初始化 + resize
   useEffect(() => {
     const init = () => setTimeout(drawMap, 50)
     init()
@@ -144,7 +185,6 @@ function ParkPage() {
     return () => window.removeEventListener('resize', init)
   }, [drawMap])
 
-  // 点击事件
   const handlePointerDown = (e) => {
     e.preventDefault()
     const canvas = canvasRef.current
@@ -162,7 +202,13 @@ function ParkPage() {
     const now = new Date()
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
-    const newMarker = { x: relX, y: relY, text: locName, time: timeStr }
+    const newMarker = {
+      x: relX,
+      y: relY,
+      text: locName,
+      time: timeStr,
+      isoTime: now.toISOString(),
+    }
     setMarker(newMarker)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newMarker))
     setAnimating(true)
@@ -170,80 +216,133 @@ function ParkPage() {
     if (navigator.vibrate) navigator.vibrate(40)
   }
 
-  // 清除记录
   const clearData = () => {
     if (window.confirm('确定要清除停车记录吗？')) {
       localStorage.removeItem(STORAGE_KEY)
       setMarker(null)
+      setParkDuration('')
     }
   }
 
+  const timeInfo = marker?.isoTime ? formatParkedTime(marker.isoTime) : null
+
   return (
-    <div className="notes-container">
+    <div style={{ maxWidth: '640px', margin: '0 auto' }}>
       <div className="page-header">
-        <h1 className="page-title">停车定位助手</h1>
-        <p className="page-desc">点击地图记录停车位置</p>
+        <h1 className="page-title">
+          <MapPin size={20} style={{ color: 'var(--primary)', marginRight: '6px', verticalAlign: 'middle' }} />
+          停车定位助手
+        </h1>
+        <p className="page-desc">点击校园地图标记你的爱车位置</p>
       </div>
 
-      <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '12px' }}>
-        在下方地图中点击停车位置（点击边缘或楼间距即可自动识别）
-      </p>
-
-      {/* 地图容器 */}
-      <div ref={containerRef} style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: '400px',
-        aspectRatio: '3 / 4.2',
-        margin: '0 auto',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        background: '#E8F0F2',
-      }}>
-        <canvas
-          ref={canvasRef}
-          style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none' }}
-          onPointerDown={handlePointerDown}
-        />
-      </div>
-
-      {/* 结果展示 */}
-      <div style={{
-        marginTop: '16px',
-        padding: '16px 20px',
-        borderRadius: '14px',
-        background: 'var(--card-bg)',
-        border: '1px solid var(--card-border)',
-        borderLeft: '4px solid var(--primary)',
-      }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>您的车辆当前停放在：</div>
-        <div style={{
-          fontSize: '20px', fontWeight: 700, color: 'var(--primary)', minHeight: '2rem',
-          animation: animating ? 'bounce 0.6s ease' : 'none',
-        }}>
-          {marker ? marker.text : '尚未记录停车位置'}
-        </div>
+      <div style={{ padding: '0 20px' }}>
         {marker && (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-            记录时间: 今天 {marker.time}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '16px 20px', marginBottom: '16px',
+            borderRadius: '14px', background: 'var(--card-bg)',
+            border: '1px solid var(--card-border)',
+            borderLeft: '4px solid var(--primary)',
+            animation: animating ? 'parkBounce 0.5s ease' : 'none',
+          }}>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '12px',
+              background: 'var(--primary-container)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Car size={22} style={{ color: 'var(--primary)' }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                {marker.text}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <Clock size={12} />
+                  {timeInfo ? timeInfo.fullText : marker.time}
+                </span>
+                {parkDuration && (
+                  <span style={{ color: 'var(--primary)', fontWeight: 500 }}>
+                    · {parkDuration}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button onClick={clearData} style={{
+              padding: '6px 10px', borderRadius: '8px',
+              border: '1px solid var(--card-border)',
+              background: 'var(--surface-container-lowest)',
+              color: 'var(--text-muted)', fontSize: '12px',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => { e.target.style.color = '#dc2626'; e.target.style.borderColor = '#fca5a5' }}
+            onMouseLeave={(e) => { e.target.style.color = 'var(--text-muted)'; e.target.style.borderColor = 'var(--card-border)' }}
+            >
+              <Trash2 size={13} /> 清除
+            </button>
           </div>
         )}
-        {marker && (
-          <button onClick={clearData} style={{
-            marginTop: '12px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #fca5a5',
-            background: '#fef2f2', color: '#dc2626', fontSize: '12px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '4px',
+
+        {!marker && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '14px 18px', marginBottom: '16px',
+            borderRadius: '14px', background: 'var(--card-bg)',
+            border: '1px dashed var(--card-border)', justifyContent: 'center',
           }}>
-            <Trash2 size={13} /> 清除记录
-          </button>
+            <MapPin size={16} style={{ color: 'var(--text-muted)' }} />
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              点击下方地图标记停车位置
+            </span>
+          </div>
         )}
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '8px 14px', marginBottom: '12px',
+          background: 'var(--primary-container)', borderRadius: '10px',
+          fontSize: '12px', color: 'var(--primary)', fontWeight: 500,
+        }}>
+          <ChevronRight size={14} />
+          点击地图中的楼栋间空地即可记录位置
+        </div>
+
+        <div ref={containerRef} style={{
+          position: 'relative', width: '100%',
+          aspectRatio: '3 / 4.2', borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(196, 198, 208, 0.15)',
+          background: '#E8F0F2',
+        }}>
+          <canvas
+            ref={canvasRef}
+            style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none' }}
+            onPointerDown={handlePointerDown}
+          />
+        </div>
+
+        <div style={{
+          display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', justifyContent: 'center',
+        }}>
+          {['SD楼', 'SC楼', 'SB楼', 'SA楼'].map(name => (
+            <span key={name} style={{
+              padding: '4px 12px', borderRadius: '20px',
+              background: 'var(--surface-container-lowest)',
+              border: '1px solid var(--card-border)',
+              fontSize: '11px', color: 'var(--text-muted)',
+            }}>
+              {name}
+            </span>
+          ))}
+        </div>
       </div>
 
       <style>{`
-        @keyframes bounce {
+        @keyframes parkBounce {
           0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
+          50% { transform: scale(1.02); }
         }
       `}</style>
     </div>

@@ -7,6 +7,8 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { sendMessage, sendMessageStream, parseSSEStream } = require('../services/hiagent');
+const db = require('../services/database');
+const { authMiddleware } = require('../services/auth');
 
 const router = express.Router();
 
@@ -52,15 +54,79 @@ router.post('/chat', asyncHandler(async (req, res) => {
   // 调用HiAgent API发送消息
   const result = await sendMessage(query, conversation_id, userId);
 
+  // 保存对话记录
+  let recordId = null;
+  try {
+    const authHeader = req.headers['authorization'];
+    let recordUserId = null;
+    let recordUsername = 'anonymous';
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'xiaomao-secret-key');
+        recordUserId = decoded.userId;
+        const userObj = db.getUserById(decoded.userId);
+        recordUsername = userObj ? (userObj.nickname || userObj.username) : 'anonymous';
+      } catch {}
+    }
+    recordId = db.saveChatRecord(recordUserId, recordUsername, query, result.answer);
+  } catch (e) {
+    console.error('[Chat] 保存对话记录失败:', e.message);
+  }
+
   // 返回格式化响应
   res.json({
     success: true,
     data: {
       answer: result.answer,
       conversation_id: result.conversation_id,
-      message_id: result.message_id
+      message_id: result.message_id,
+      record_id: recordId
     }
   });
+}));
+
+/**
+ * POST /api/chat/reaction - 更新对话反馈（赞/踩）
+ */
+router.post('/chat/reaction', asyncHandler(async (req, res) => {
+  const { record_id, reaction } = req.body;
+
+  if (!record_id || !['like', 'dislike'].includes(reaction)) {
+    throw new AppError('参数无效', 400, 'INVALID_PARAMS');
+  }
+
+  db.updateChatRecordReaction(record_id, reaction);
+
+  res.json({ success: true });
+}));
+
+/**
+ * POST /api/chat/save - 保存本地对话记录（用于快速回复等）
+ */
+router.post('/chat/save', asyncHandler(async (req, res) => {
+  const { user_message, ai_answer } = req.body;
+
+  if (!user_message) {
+    throw new AppError('user_message不能为空', 400, 'INVALID_PARAMS');
+  }
+
+  let recordUserId = null;
+  let recordUsername = 'anonymous';
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'xiaomao-secret-key');
+      recordUserId = decoded.userId;
+      const userObj = db.getUserById(decoded.userId);
+      recordUsername = userObj ? (userObj.nickname || userObj.username) : 'anonymous';
+    } catch {}
+  }
+
+  const recordId = db.saveChatRecord(recordUserId, recordUsername, user_message, ai_answer || '');
+
+  res.json({ success: true, data: { record_id: recordId } });
 }));
 
 /**

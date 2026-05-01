@@ -100,4 +100,49 @@ router.delete('/admin/users/:id', (req, res) => {
   });
 });
 
+// ==================== 对话记录管理 ====================
+
+/**
+ * GET /api/admin/chat-records - 获取所有对话记录
+ */
+router.get('/admin/chat-records', (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const pageSize = parseInt(req.query.pageSize, 10) || 20;
+  const userId = req.query.userId ? parseInt(req.query.userId, 10) : null;
+
+  const result = db.getAllChatRecords({ page, pageSize, userId });
+
+  res.json({
+    success: true,
+    data: result,
+  });
+});
+
+/**
+ * DELETE /api/admin/chat-records/:id - 删除对话记录
+ */
+router.delete('/admin/chat-records/:id', (req, res) => {
+  const recordId = parseInt(req.params.id, 10);
+
+  if (isNaN(recordId)) {
+    return res.status(400).json({
+      success: false,
+      message: '无效的记录ID',
+    });
+  }
+
+  const deleted = db.deleteChatRecord(recordId);
+  if (!deleted) {
+    return res.status(404).json({
+      success: false,
+      message: '记录不存在',
+    });
+  }
+
+  res.json({
+    success: true,
+    message: '记录已删除',
+  });
+});
+
 module.exports = router;
