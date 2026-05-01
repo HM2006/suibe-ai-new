@@ -412,7 +412,9 @@ function UserProfile() {
     if (previewImgRef.current && previewCanvasRef.current) {
       const img = previewImgRef.current
       const canvas = previewCanvasRef.current
-      const scale = Math.min(canvas.clientWidth / img.naturalWidth, canvas.clientHeight / img.naturalHeight, 1)
+      const cropSize = Math.min(canvas.clientWidth, canvas.clientHeight)
+      // 计算让图片正好覆盖裁剪框的缩放比例
+      const scale = Math.max(cropSize / img.naturalWidth, cropSize / img.naturalHeight)
       setZoom(scale)
       panRef.current = { x: 0, y: 0 }
       setPanState({ x: 0, y: 0 })
@@ -619,10 +621,16 @@ function UserProfile() {
         )}
 
         {/* 真实姓名和专业年级（从教务系统同步） */}
-        {(user.edu_name || user.edu_major_grade) && (
+        {(user.edu_name || user.edu_major_grade) ? (
           <div className="user-real-info">
             {user.edu_name && <span className="user-real-name">{user.edu_name}</span>}
             {user.edu_major_grade && <span className="user-major-grade">{user.edu_major_grade}</span>}
+          </div>
+        ) : (
+          <div className="user-real-info">
+            <span className="user-major-grade" style={{ opacity: 0.6, fontSize: '11px' }}>
+              {user.eduConnected ? '暂无教务数据' : '未连接教务系统，暂无身份信息'}
+            </span>
           </div>
         )}
 

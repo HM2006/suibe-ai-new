@@ -151,8 +151,15 @@ function Layout({ children }) {
                   justifyContent: 'center',
                   fontSize: '13px',
                   fontWeight: 600,
+                  overflow: 'hidden'
                 }}>
-                  {(user.nickname || user.username)[0].toUpperCase()}
+                  {(user.avatar && !user.avatar.startsWith('/') && !user.avatar.startsWith('http') && !user.avatar.startsWith('data:')) ? (
+                    <span style={{ fontSize: '18px', lineHeight: 1 }}>{user.avatar}</span>
+                  ) : user.avatar ? (
+                    <img src={user.avatar} alt="头像" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    (user.nickname || user.username)[0].toUpperCase()
+                  )}
                 </div>
                 <span className="header-username">{user.nickname || user.username}</span>
               </div>
