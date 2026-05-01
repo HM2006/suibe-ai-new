@@ -1,0 +1,663 @@
+/* ========================================
+   小贸 - 课表查询页面
+   按教学周查看 + 周六周日支持
+   数据来源：用户页面登录教务系统后自动缓存
+   ======================================== */
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, MapPin, User, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
+
+/* 星期配置（含周六周日） */
+const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+
+/* 时间段配置（14个节次，与教务系统一致） */
+const timeSlots = [
+  { label: '第1节', time: '08:15-08:55' },
+  { label: '第2节', time: '09:00-09:40' },
+  { label: '第3节', time: '09:55-10:35' },
+  { label: '第4节', time: '10:40-11:20' },
+  { label: '第5节', time: '11:25-12:05' },
+  { label: '第6节', time: '13:00-13:40' },
+  { label: '第7节', time: '13:45-14:25' },
+  { label: '第8节', time: '14:40-15:20' },
+  { label: '第9节', time: '15:25-16:05' },
+  { label: '第10节', time: '16:10-16:50' },
+  { label: '第11节', time: '16:55-17:35' },
+  { label: '第12节', time: '18:45-19:25' },
+  { label: '第13节', time: '19:40-20:20' },
+  { label: '第14节', time: '20:25-21:05' },
+]
+
+// 2025-2026学年第二学期校历
+const SEMESTER_START = new Date(2026, 2, 2) // 2026年3月2日（周一）
+const SEMESTER_END = new Date(2026, 6, 12)  // 2026年7月12日
+const TOTAL_WEEKS = 19
+
+/**
+ * 根据日期计算当前是第几周
+ * 学期从3月2日（周一）开始，每周从周一开始
+ */
+function getCurrentWeek() {
+  const now = new Date()
+  if (now < SEMESTER_START) return 0 // 学期未开始
+  if (now > SEMESTER_END) return TOTAL_WEEKS + 1 // 学期已结束
+  const diff = now.getTime() - SEMESTER_START.getTime()
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const week = Math.floor(days / 7) + 1
+  return Math.min(week, TOTAL_WEEKS)
+}
+
+/**
+ * 获取指定周次的日期范围
+ */
+function getWeekDateRange(weekNum) {
+  const start = new Date(SEMESTER_START)
+  start.setDate(start.getDate() + (weekNum - 1) * 7)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  const fmt = d => `${d.getMonth() + 1}/${d.getDate()}`
+  return `${fmt(start)} - ${fmt(end)}`
+}
+
+/* 课程颜色配置 */
+const courseColors = [
+  { bg: '#EEF2FF', text: '#4338CA', border: '#C7D2FE' },
+  { bg: '#D1FAE5', text: '#065F46', border: '#A7F3D0' },
+  { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' },
+  { bg: '#FCE7F3', text: '#9D174D', border: '#FBCFE8' },
+  { bg: '#CFFAFE', text: '#155E75', border: '#A5F3FC' },
+  { bg: '#EDE9FE', text: '#5B21B6', border: '#DDD6FE' },
+  { bg: '#FEE2E2', text: '#991B1B', border: '#FECACA' },
+  { bg: '#FEF9C3', text: '#854D0E', border: '#FEF08A' },
+  { bg: '#DBEAFE', text: '#1E40AF', border: '#BFDBFE' },
+  { bg: '#F3E8FF', text: '#7E22CE', border: '#E9D5FF' },
+]
+
+/**
+ * 从所有课程中计算最大周数
+ */
+function getMaxWeek(allCourses) {
+  let max = 1
+  for (const dayCourses of Object.values(allCourses)) {
+    if (!Array.isArray(dayCourses)) continue
+    for (const c of dayCourses) {
+      if (Array.isArray(c.weekIndexes) && c.weekIndexes.length > 0) {
+        const m = Math.max(...c.weekIndexes)
+        if (m > max) max = m
+      }
+    }
+  }
+  return max
+}
+
+/**
+ * 判断某门课在指定周是否有课
+ * weekIndexes 是该课有课的周次数组，如 [1,2,3,4,5,7,8,9,10,11,12,13,14,15,16]
+ */
+function isCourseInWeek(course, weekNum) {
+  if (!course.weekIndexes || course.weekIndexes.length === 0) return true // 无周次信息则默认显示
+  return course.weekIndexes.includes(weekNum)
+}
+
+/**
+ * 将后端原始课表数据转换为组件格式
+ * 后端数据格式: { 0: [{name, teacher, location, time, slot, endSlot, day, weeks, weekIndexes, ...}], ... }
+ */
+function transformRealSchedule(realData) {
+  const result = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }
+
+  if (!realData) return result
+
+  const courseColorMap = {}
+  let colorIndex = 0
+
+  if (typeof realData === 'object' && !Array.isArray(realData)) {
+    for (let dayKey = 0; dayKey < 7; dayKey++) {
+      const dayCourses = realData[dayKey] || realData[String(dayKey)]
+      if (!Array.isArray(dayCourses)) continue
+      dayCourses.forEach((course) => {
+        if (!(course.name in courseColorMap)) {
+          courseColorMap[course.name] = colorIndex % courseColors.length
+          colorIndex++
+        }
+        result[dayKey].push({
+          name: course.name,
+          teacher: course.teacher || '',
+          room: course.location || '',
+          time: course.time || '',
+          slot: course.slot ?? 0,
+          endSlot: course.endSlot ?? course.slot ?? 0,
+          color: courseColorMap[course.name],
+          weeks: course.weeks || '',
+          weekIndexes: course.weekIndexes || [],
+          type: course.type || '',
+          code: course.code || '',
+          enrollment: course.enrollment || '',
+        })
+      })
+    }
+  } else if (Array.isArray(realData)) {
+    const weekdayToIndex = { '周一': 0, '周二': 1, '周三': 2, '周四': 3, '周五': 4, '周六': 5, '周日': 6 }
+    realData.forEach((dayData) => {
+      const dayIndex = typeof dayData.day === 'number' ? dayData.day - 1 : weekdayToIndex[dayData.weekday]
+      if (dayIndex === undefined || dayIndex < 0 || dayIndex > 6) return
+      if (!(dayData.name in courseColorMap)) {
+        courseColorMap[dayData.name] = colorIndex % courseColors.length
+        colorIndex++
+      }
+      result[dayIndex].push({
+        name: dayData.name,
+        teacher: dayData.teacher || '',
+        room: dayData.location || '',
+        time: dayData.time || '',
+        slot: dayData.slot ?? 0,
+        endSlot: dayData.endSlot ?? dayData.slot ?? 0,
+        color: courseColorMap[dayData.name],
+        weeks: dayData.weeks || '',
+        weekIndexes: dayData.weekIndexes || [],
+        type: dayData.type || '',
+      })
+    })
+  }
+
+  return result
+}
+
+function SchedulePage() {
+  const navigate = useNavigate()
+  const today = new Date()
+  const todayDayIndex = today.getDay() // 0=周日, 1=周一, ..., 6=周六
+  const [selectedDay, setSelectedDay] = useState(
+    todayDayIndex >= 1 && todayDayIndex <= 7 ? todayDayIndex - 1 : 0
+  )
+
+  const { user, token } = useUser()
+
+  /* 真实课表数据（从缓存加载） */
+  const [realSchedule, setRealSchedule] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [dataSource, setDataSource] = useState('mock')
+
+  /* 周选择器状态 */
+  const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeek())
+  const [maxWeek, setMaxWeek] = useState(TOTAL_WEEKS)
+
+  /* 组件挂载时，从profile获取缓存的课表数据 */
+  useEffect(() => {
+    const loadData = async () => {
+      if (!token) { setIsLoading(false); return }
+      setIsLoading(true)
+      try {
+        const res = await fetch(`${API.user}/profile`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.success && data.data?.scheduleCache) {
+          const scheduleRaw = data.data.scheduleCache.data
+          const transformed = transformRealSchedule(
+            scheduleRaw?.courses || scheduleRaw
+          )
+          const hasData = Object.values(transformed).some((courses) => courses.length > 0)
+          if (hasData) {
+            setRealSchedule(transformed)
+            setDataSource('cached')
+            setMaxWeek(getMaxWeek(transformed))
+          }
+        }
+      } catch (err) {
+        console.warn('加载缓存课表失败:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadData()
+  }, [token])
+
+  /* 获取当前时间段（用于高亮，基于14个节次） */
+  const currentTimeSlot = useMemo(() => {
+    const now = new Date()
+    const hours = now.getHours()
+    const minutes = now.getMinutes()
+    const currentMinutes = hours * 60 + minutes
+
+    if (currentMinutes >= 480 && currentMinutes < 525) return 0
+    if (currentMinutes >= 535 && currentMinutes < 580) return 1
+    if (currentMinutes >= 600 && currentMinutes < 645) return 2
+    if (currentMinutes >= 655 && currentMinutes < 700) return 3
+    if (currentMinutes >= 810 && currentMinutes < 855) return 4
+    if (currentMinutes >= 865 && currentMinutes < 910) return 5
+    if (currentMinutes >= 920 && currentMinutes < 965) return 6
+    if (currentMinutes >= 975 && currentMinutes < 1020) return 7
+    if (currentMinutes >= 1080 && currentMinutes < 1125) return 8
+    if (currentMinutes >= 1135 && currentMinutes < 1180) return 9
+    if (currentMinutes >= 1190 && currentMinutes < 1235) return 10
+    if (currentMinutes >= 1245 && currentMinutes < 1290) return 11
+    if (currentMinutes >= 1295 && currentMinutes < 1340) return 12
+    if (currentMinutes >= 1345 && currentMinutes < 1390) return 13
+    return -1
+  }, [])
+
+  /* 按选中的周过滤课表数据 */
+  const filteredSchedule = useMemo(() => {
+    if (!realSchedule) return {}
+    const filtered = {}
+    for (let day = 0; day < 7; day++) {
+      const dayCourses = realSchedule[day] || []
+      filtered[day] = dayCourses.filter(c => isCourseInWeek(c, selectedWeek))
+    }
+    return filtered
+  }, [realSchedule, selectedWeek])
+
+  /* 当前使用的课表数据（过滤后） */
+  const scheduleData = filteredSchedule
+
+  /* 获取指定位置的课程（考虑跨节次） */
+  const getCourse = (day, slot) => {
+    const courses = scheduleData[day] || []
+    return courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    }) || null
+  }
+
+  /* 判断是否是课程的起始节次 */
+  const isCourseStart = (day, slot) => {
+    const courses = scheduleData[day] || []
+    const course = courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    })
+    return course && (course.slot ?? 0) === slot
+  }
+
+  /* 获取课程的跨行数 */
+  const getCourseSpan = (day, slot) => {
+    const courses = scheduleData[day] || []
+    const course = courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    })
+    if (!course) return 1
+    return (course.endSlot ?? course.slot ?? slot) - (course.slot ?? slot) + 1
+  }
+
+  /* 判断是否为当前时间 */
+  const isCurrentSlot = (day, slot) => {
+    const todayIdx = today.getDay() - 1
+    return todayIdx === day && currentTimeSlot === slot
+  }
+
+  /* 统计选中周的课程数量 */
+  const weekCourseCount = useMemo(() => {
+    return Object.values(scheduleData).reduce((sum, courses) => sum + courses.length, 0)
+  }, [scheduleData])
+
+  /* 快捷周选择按钮 */
+  const quickWeeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+  return (
+    <div className="schedule-container">
+      {/* 页面标题 */}
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="page-title">课表查询</h1>
+          <p className="page-desc">按教学周查看课程安排</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {dataSource === 'cached' && (
+            <span className="data-source-tag cached">教务数据</span>
+          )}
+        </div>
+      </div>
+
+      {/* 加载骨架屏 */}
+      {isLoading && (
+        <div className="schedule-loading">
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--outline-variant)' }}>
+              <div style={{ width: 60, height: 14, borderRadius: 4, background: 'var(--surface-container)', animation: 'pulse 1.5s infinite' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ width: '50%', height: 16, borderRadius: 4, background: 'var(--surface-container)', marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
+                <div style={{ width: '30%', height: 12, borderRadius: 4, background: 'var(--surface-container)', animation: 'pulse 1.5s infinite' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 未连接教务系统提示 */}
+      {!isLoading && !realSchedule && (
+        <div style={{
+          padding: '40px 20px',
+          textAlign: 'center',
+          color: 'var(--text-muted)',
+        }}>
+          <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+          <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>
+            暂无课表数据
+          </p>
+          <p style={{ fontSize: '13px', marginBottom: '16px' }}>
+            请前往「用户」页面连接教务系统以获取真实课表
+          </p>
+          <button
+            onClick={() => navigate('/user')}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            前往连接
+          </button>
+        </div>
+      )}
+
+      {/* 有数据时显示课表 */}
+      {realSchedule && (<>
+
+      {/* 校历信息栏 */}
+      <div className="schedule-semester-info">
+        <div className="schedule-semester-label">
+          <Calendar size={14} />
+          <span>2025-2026学年 第二学期</span>
+        </div>
+        <div className="schedule-semester-dates">
+          {getWeekDateRange(selectedWeek)}
+        </div>
+        <div className={`schedule-semester-week-badge ${selectedWeek === getCurrentWeek() ? 'current' : ''}`}>
+          第{selectedWeek}周
+          {selectedWeek === getCurrentWeek() && selectedWeek > 0 && selectedWeek <= TOTAL_WEEKS && (
+            <span className="schedule-current-tag">本周</span>
+          )}
+        </div>
+      </div>
+
+      {/* ====== 周选择器 ====== */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '12px 16px',
+        marginBottom: '12px',
+      }}>
+        {/* 周导航 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <button
+            onClick={() => setSelectedWeek(w => Math.max(1, w - 1))}
+            disabled={selectedWeek <= 1}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: selectedWeek <= 1 ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek <= 1 ? 0.4 : 1,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              第 {selectedWeek} 教学周
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              本周共 {weekCourseCount} 节课
+            </div>
+          </div>
+
+          <button
+            onClick={() => setSelectedWeek(w => Math.min(maxWeek, w + 1))}
+            disabled={selectedWeek >= maxWeek}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: selectedWeek >= maxWeek ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek >= maxWeek ? 0.4 : 1,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* 快捷周选择 */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '4px',
+        }}>
+          {quickWeeks.filter(w => w <= maxWeek).map(w => (
+            <button
+              key={w}
+              onClick={() => setSelectedWeek(w)}
+              style={{
+                minWidth: '32px', height: '26px', borderRadius: '6px',
+                border: selectedWeek === w ? 'none' : '1px solid var(--card-border)',
+                background: selectedWeek === w ? 'var(--primary)' : 'transparent',
+                color: selectedWeek === w ? '#fff' : 'var(--text-secondary)',
+                fontSize: '12px', fontWeight: selectedWeek === w ? 600 : 400,
+                cursor: 'pointer', padding: '0 6px',
+                transition: 'all 0.15s',
+              }}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ====== 星期选择器 ====== */}
+      <div className="schedule-week-selector">
+        {weekDays.map((day, index) => (
+          <button
+            key={day}
+            className={`week-btn ${selectedDay === index ? 'active' : ''}`}
+            onClick={() => setSelectedDay(index)}
+          >
+            {day}
+          </button>
+        ))}
+      </div>
+
+      {/* ====== 当日课程概览（移动端友好） ====== */}
+      <div className="schedule-overview">
+        <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
+          {weekDays[selectedDay]}课程概览
+          <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '8px' }}>
+            第{selectedWeek}周
+          </span>
+        </h3>
+        {scheduleData[selectedDay] && scheduleData[selectedDay].length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {scheduleData[selectedDay]
+              .sort((a, b) => a.slot - b.slot)
+              .map((course) => {
+                const colorConfig = courseColors[course.color % courseColors.length]
+                const isCurrent = isCurrentSlot(selectedDay, course.slot)
+                return (
+                  <div
+                    key={course.name + course.time + course.weekIndexes?.join(',')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      background: 'var(--card-bg)',
+                      border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--card-border)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: isCurrent ? '0 0 0 2px rgba(79,70,229,0.1)' : 'none',
+                      transition: 'box-shadow 0.15s, border-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--primary)'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isCurrent) e.currentTarget.style.borderColor = 'var(--card-border)'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '4px',
+                        height: '40px',
+                        borderRadius: '2px',
+                        background: colorConfig.text,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {course.name}
+                        </span>
+                        {isCurrent && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              padding: '1px 6px',
+                              background: '#EEF2FF',
+                              color: '#4F46E5',
+                              borderRadius: 'var(--radius-full)',
+                              flexShrink: 0,
+                            }}
+                          >
+                            进行中
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {course.teacher} · {course.room} · {course.time}
+                        {course.weeks && ` · ${course.weeks}`}
+                      </div>
+                    </div>
+                    <Clock size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                  </div>
+                )
+              })}
+          </div>
+        ) : (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '32px',
+              color: 'var(--text-muted)',
+              fontSize: '14px',
+            }}
+          >
+            第{selectedWeek}周 {weekDays[selectedDay]} 没有课程
+          </div>
+        )}
+      </div>
+
+      {/* ====== 课程表格（桌面端显示） ====== */}
+      <div className="schedule-table">
+        {/* 表头 */}
+        <div className="schedule-table-header">
+          <div className="header-cell">时间</div>
+          {weekDays.map((day, index) => (
+            <div
+              key={day}
+              className="header-cell"
+              style={{
+                background: selectedDay === index ? '#EEF2FF' : undefined,
+                color: selectedDay === index ? '#4F46E5' : undefined,
+                fontWeight: selectedDay === index ? 600 : undefined,
+              }}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* 课程内容 */}
+        <div className="schedule-table-body">
+          {timeSlots.map((slot, slotIndex) => (
+            <>
+              <div className="time-cell">
+                <span style={{ fontWeight: 600, fontSize: '11px' }}>
+                  {slot.label}
+                </span>
+                <span style={{ fontSize: '10px', marginTop: '2px' }}>
+                  {slot.time.split('-')[0]}
+                </span>
+              </div>
+
+              {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+                const course = getCourse(dayIndex, slotIndex)
+                const isCurrent = isCurrentSlot(dayIndex, slotIndex)
+                const isStart = isCourseStart(dayIndex, slotIndex)
+                const span = getCourseSpan(dayIndex, slotIndex)
+                const colorConfig = course
+                  ? courseColors[course.color % courseColors.length]
+                  : null
+
+                /* 如果不是课程起始节次，跳过（被上面的 rowSpan 覆盖） */
+                if (course && !isStart) return null
+
+                return (
+                  <div
+                    key={`${dayIndex}-${slotIndex}`}
+                    className="course-cell"
+                    style={span > 1 ? { gridRow: `span ${span}` } : undefined}
+                  >
+                    {course ? (
+                      <div
+                        className={`course-card ${isCurrent ? 'current' : ''}`}
+                        style={{
+                          background: colorConfig.bg,
+                          color: colorConfig.text,
+                          border: `1px solid ${colorConfig.border}`,
+                          height: span > 1 ? '100%' : undefined,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          transition: 'transform 0.15s, box-shadow 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.02)'
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'
+                          e.currentTarget.style.zIndex = '2'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'none'
+                          e.currentTarget.style.boxShadow = 'none'
+                          e.currentTarget.style.zIndex = '1'
+                        }}
+                      >
+                        <div className="course-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {course.name}
+                        </div>
+                        <div className="course-info">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <MapPin size={10} />
+                            {course.room}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <User size={10} />
+                            {course.teacher}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </>
+          ))}
+        </div>
+      </div>
+      </>)}
+    </div>
+  )
+}
+
+export default SchedulePage

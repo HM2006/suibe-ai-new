@@ -1,0 +1,19 @@
+{
+  "appId": "xyz.mmxiong.xiaomao",
+  "appName": "小贸",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#3525cd",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#3525cd"
+    }
+  }
+}

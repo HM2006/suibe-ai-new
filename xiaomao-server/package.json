@@ -1,0 +1,29 @@
+{
+  "name": "xiaomao-server",
+  "version": "1.0.0",
+  "description": "校园AI助手「小贸」后端服务",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "xiaomao",
+    "campus",
+    "ai",
+    "assistant"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "https-proxy-agent": "^5.0.1",
+    "jsonwebtoken": "^9.0.3",
+    "uuid": "^10.0.0"
+  }
+}
