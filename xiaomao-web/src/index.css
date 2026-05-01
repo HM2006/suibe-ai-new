@@ -419,7 +419,7 @@ select {
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(var(--bottom-nav-height) + 12px);
+  height: var(--bottom-nav-height);
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -2369,34 +2369,23 @@ select {
   }
 
   .bottom-nav {
-    height: calc(var(--bottom-nav-height) + 12px + var(--safe-area-bottom));
+    height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
     padding: 0;
     padding-bottom: var(--safe-area-bottom);
   }
 
   .bottom-nav-list {
-    justify-content: space-evenly;
+    justify-content: space-around;
     padding: 0 8px;
-    align-items: flex-end;
   }
 
   .bottom-nav-link {
     font-size: 10px;
     padding: 6px 2px;
     min-width: 0;
-    flex: 0 1 auto;
-    height: auto;
+    flex: 1;
+    height: 100%;
     box-sizing: border-box;
-  }
-
-  .bottom-nav-list > li {
-    flex: 1 1 0;
-    display: flex;
-    justify-content: center;
-  }
-
-  .bottom-nav-list > li:nth-child(3) {
-    flex: 0 0 auto;
   }
 
   .bottom-nav-link .nav-icon {
@@ -2408,21 +2397,21 @@ select {
     flex-shrink: 0;
   }
 
-  /* 首页按钮保持突出圆形样式 */
+  /* 首页按钮保持圆形样式 */
   .bottom-nav-list > li:nth-child(3) .nav-icon {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary), var(--primary-light));
     color: white;
-    padding: 10px;
-    box-shadow: 0 4px 14px rgba(53, 37, 205, 0.35);
+    padding: 8px;
+    box-shadow: 0 2px 10px rgba(53, 37, 205, 0.25);
   }
 
   .page-content {
-    padding-bottom: calc(var(--bottom-nav-height) + 16px);
+    padding-bottom: var(--bottom-nav-height);
   }
 
   .top-header {
@@ -3200,36 +3189,29 @@ textarea:focus-visible {
 /* ========================================
    31. Bottom Nav Center Button (底栏首页居中)
    ======================================== */
-.bottom-nav-list > li:nth-child(3) .bottom-nav-link {
-  position: relative;
-  top: -10px;
-}
-
 .bottom-nav-list > li:nth-child(3) .nav-icon {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), var(--primary-light));
   color: white;
-  padding: 10px;
-  box-shadow: 0 4px 14px rgba(53, 37, 205, 0.35);
+  padding: 8px;
+  box-shadow: 0 2px 10px rgba(53, 37, 205, 0.25);
   transition: all var(--transition-fast);
 }
 
 .bottom-nav-list > li:nth-child(3) .bottom-nav-link:hover .nav-icon {
-  box-shadow: 0 6px 20px rgba(53, 37, 205, 0.45);
-  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(53, 37, 205, 0.35);
+  transform: scale(1.08);
+}
+
+.bottom-nav-list > li:nth-child(3) .bottom-nav-link.active .nav-icon {
+  box-shadow: 0 4px 16px rgba(53, 37, 205, 0.4);
 }
 
 .bottom-nav-list > li:nth-child(3) .bottom-nav-link span {
   font-weight: 600;
   color: var(--primary);
-}
-
-/* 更多按钮样式 */
-.bottom-nav-more .nav-icon {
-  width: 22px;
-  height: 22px;
 }
 
 /* ========================================

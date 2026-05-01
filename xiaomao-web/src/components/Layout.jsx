@@ -48,10 +48,10 @@ const bottomNavItems = [
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/dashboard', label: '首页', icon: LayoutDashboard },
   { path: '/campus/news', label: '资讯', icon: Newspaper },
-  { path: '/notes', label: '随记', icon: FileText },
+  { path: '/more', label: '更多', icon: Grid2X2 },
 ]
 
-/* "更多"面板中的功能项（底部栏未直接展示的） */
+/* "更多"面板中的功能项 */
 const moreNavItems = [
   { path: '/campus/map', label: '校园导航', icon: Map, desc: '校园地图与导航' },
   { path: '/campus/grades', label: '成绩查询', icon: BarChart3, desc: '查看各科成绩' },
@@ -60,6 +60,7 @@ const moreNavItems = [
   { path: '/empty-rooms', label: '空教室查询', icon: DoorOpen, desc: '快速找到空闲教室' },
   { path: '/park', label: '停车定位', icon: Car, desc: '记录停车位置' },
   { path: '/scholarship', label: '奖学金计算器', icon: Award, desc: '综合测评分数计算' },
+  { path: '/notes', label: '随记', icon: FileText, desc: '记录课程要点' },
 ]
 
 /* 根据当前路径获取页面标题 */
@@ -172,28 +173,27 @@ function Layout({ children }) {
         <ul className="bottom-nav-list">
           {bottomNavItems.map((item) => (
             <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  `bottom-nav-link ${isActive ? 'active' : ''}`
-                }
-              >
-                <item.icon className="nav-icon" />
-                <span>{item.label}</span>
-              </NavLink>
+              {item.path === '/more' ? (
+                <button
+                  className={`bottom-nav-link more-btn ${showMore ? 'active' : ''}`}
+                  onClick={() => setShowMore(true)}
+                >
+                  <item.icon className="nav-icon" />
+                  <span>{item.label}</span>
+                </button>
+              ) : (
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `bottom-nav-link ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <item.icon className="nav-icon" />
+                  <span>{item.label}</span>
+                </NavLink>
+              )}
             </li>
           ))}
-
-          {/* 更多功能按钮 */}
-          <li className="bottom-nav-more">
-            <button
-              className={`bottom-nav-link more-btn ${showMore ? 'active' : ''}`}
-              onClick={() => setShowMore(true)}
-            >
-              <Grid2X2 className="nav-icon" />
-              <span>更多</span>
-            </button>
-          </li>
         </ul>
       </nav>
 
