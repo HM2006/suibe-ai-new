@@ -341,8 +341,10 @@ function ChatPage() {
     setIsLoading(true)
     startLoadingAnimation()
 
+    let aiMessageId = null
+
     try {
-      const aiMessageId = Date.now() + 1
+      aiMessageId = Date.now() + 1
       setMessages((prev) => [
         ...prev,
         { id: aiMessageId, role: 'assistant', content: '', recordId: null },
@@ -360,10 +362,16 @@ function ChatPage() {
       let fullContent = ''
       let buffer = ''
       let firstChunkReceived = false
+      let streamCompleted = false
 
-      const processSSELine = (line) => {
+      const processSSELine = (line, eventType = null) => {
         const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('event:')) return
+        if (!trimmed) return
+
+        // 处理 event: 行
+        if (trimmed.startsWith('event:')) {
+          return trimmed.slice(6).trim()
+        }
 
         if (trimmed.startsWith('data:')) {
           const dataStr = trimmed.slice(5).trim()
@@ -372,6 +380,21 @@ function ChatPage() {
           try {
             const parsed = JSON.parse(dataStr)
             if (parsed.status === 'connected') return
+
+            // 处理错误事件
+            if (eventType === 'error' || parsed.message) {
+              const errorMsg = parsed.message || '服务出错'
+              stopLoadingAnimation()
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId
+                    ? { ...msg, content: `抱歉，${errorMsg}` }
+                    : msg
+                )
+              )
+              return
+            }
+
             const content = parsed.answer || parsed.content || ''
             if (content) {
               if (!firstChunkReceived) {
@@ -386,42 +409,56 @@ function ChatPage() {
               )
             }
           } catch {
-            if (!firstChunkReceived) {
-              firstChunkReceived = true
-              stopLoadingAnimation()
-            }
-            fullContent += dataStr
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+            // 解析失败但内容不为空，也显示
+            if (dataStr && dataStr !== '[DONE]') {
+              if (!firstChunkReceived) {
+                firstChunkReceived = true
+                stopLoadingAnimation()
+              }
+              fullContent += dataStr
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+                )
               )
-            )
+            }
           }
         }
+        return null
       }
+
+      let currentEventType = null
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          streamCompleted = true
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          processSSELine(line)
+          const eventType = processSSELine(line, currentEventType)
+          if (eventType !== null && eventType !== undefined) {
+            currentEventType = eventType
+          }
         }
       }
 
       if (buffer.trim()) {
-        processSSELine(buffer)
+        processSSELine(buffer, currentEventType)
       }
 
-      if (!fullContent) {
+      // 流结束后，如果没有收到任何内容，显示错误信息
+      if (!fullContent && streamCompleted) {
+        stopLoadingAnimation()
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessageId
-              ? { ...msg, content: '抱歉，我暂时无法理解你的问题。' }
+              ? { ...msg, content: '抱歉，AI 服务暂时无法响应。请检查后端配置或稍后再试。' }
               : msg
           )
         )
@@ -449,18 +486,27 @@ function ChatPage() {
 
     } catch (error) {
       console.error('发送消息失败:', error)
-      setMessages((prev) => {
-        const filtered = prev.filter((msg) => msg.content !== '')
-        return [
-          ...filtered,
+      stopLoadingAnimation()
+      // 如果已经创建了 AI 消息，更新它；否则创建新消息
+      if (aiMessageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessageId
+              ? { ...msg, content: '抱歉，连接出现了问题。请检查网络连接或稍后再试。\n\n如果后端服务未启动，请先运行 `npm run dev` 启动后端服务。' }
+              : msg
+          )
+        )
+      } else {
+        setMessages((prev) => [
+          ...prev,
           {
             id: Date.now() + 1,
             role: 'assistant',
             content: '抱歉，连接出现了问题。请检查网络连接或稍后再试。\n\n如果后端服务未启动，请先运行 `npm run dev` 启动后端服务。',
             recordId: null,
           },
-        ]
-      })
+        ])
+      }
     } finally {
       setIsLoading(false)
       stopLoadingAnimation()

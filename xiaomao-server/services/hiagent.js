@@ -19,6 +19,14 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const API_BASE = process.env.HIAGENT_API_BASE || 'https://agent.suibe.edu.cn/api/proxy/api/v1';
 const API_KEY = process.env.HIAGENT_API_KEY || '';
 
+// 检查 HiAgent 是否已配置
+function checkConfig() {
+  if (!API_KEY) {
+    return { configured: false, message: 'HiAgent API 密钥未配置，请在环境变量中设置 HIAGENT_API_KEY' };
+  }
+  return { configured: true };
+}
+
 // 代理配置（从环境变量读取）
 const PROXY_URL = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || null;
 const proxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
@@ -106,6 +114,13 @@ async function createConversation(userId) {
  * @returns {Promise<{answer: string, conversationId: string, messageId: string}>}
  */
 async function sendMessage(query, conversationId, userId = 'default-user') {
+  // 检查配置
+  const config = checkConfig();
+  if (!config.configured) {
+    console.error('[HiAgent]', config.message);
+    throw new Error(config.message);
+  }
+
   let convId = conversationId;
 
   if (!convId) {
@@ -155,6 +170,13 @@ async function sendMessage(query, conversationId, userId = 'default-user') {
  * @returns {Promise<http.IncomingMessage>} 原始响应流
  */
 async function sendMessageStream(query, conversationId, userId = 'default-user') {
+  // 检查配置
+  const config = checkConfig();
+  if (!config.configured) {
+    console.error('[HiAgent]', config.message);
+    throw new Error(config.message);
+  }
+
   let convId = conversationId;
 
   if (!convId) {
@@ -217,6 +239,7 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
   let conversationId = '';
   let messageId = '';
   let buffer = '';
+  let isCompleted = false;
 
   stream.on('data', (chunk) => {
     buffer += chunk.toString();
@@ -235,41 +258,81 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
           const data = JSON.parse(dataStr);
           const event = data.event;
 
+          // 提取消息内容 - 支持多种可能的字段名
+          const content = data.answer || data.content || data.text || data.message || data.output || '';
+          
           switch (event) {
             case 'message':
-              if (data.answer) {
-                fullAnswer += data.answer;
-                onMessage(data.answer);
+            case 'message_output':
+              // 消息内容片段
+              if (content) {
+                fullAnswer += content;
+                onMessage(content);
+              }
+              // 也可能是 delta 格式
+              if (data.delta) {
+                const deltaContent = typeof data.delta === 'string' ? data.delta : (data.delta.content || '');
+                if (deltaContent) {
+                  fullAnswer += deltaContent;
+                  onMessage(deltaContent);
+                }
               }
               if (data.conversation_id) conversationId = data.conversation_id;
-              if (data.id) messageId = data.id;
+              if (data.id || data.task_id) messageId = data.id || data.task_id;
               break;
 
             case 'message_end':
-              if (data.answer) fullAnswer += data.answer;
+            case 'message_output_end':
+            case 'message_finish':
+              // 消息结束事件
+              if (content && !fullAnswer.includes(content)) {
+                fullAnswer += content;
+              }
               if (data.conversation_id) conversationId = data.conversation_id;
-              if (data.id) messageId = data.id;
-              onComplete(fullAnswer, conversationId, messageId);
+              if (data.id || data.task_id) messageId = data.id || data.task_id;
+              if (!isCompleted) {
+                isCompleted = true;
+                onComplete(fullAnswer, conversationId, messageId);
+              }
               break;
 
             case 'message_failed':
-              onError(new Error(data.message || 'AI 服务返回错误'));
+            case 'error':
+              onError(new Error(data.message || data.error || 'AI 服务返回错误'));
               break;
 
             case 'message_start':
               if (data.conversation_id) conversationId = data.conversation_id;
-              if (data.id) messageId = data.id;
+              if (data.id || data.task_id) messageId = data.id || data.task_id;
               break;
 
             case 'message_replace':
-              fullAnswer = data.answer || '';
+              fullAnswer = content || '';
+              break;
+
+            case 'message_cost':
+            case 'message_usage':
+              // 成本/用量信息，忽略
               break;
 
             default:
+              // 对于未知事件，如果有内容也尝试处理
+              if (content && event !== 'ping' && event !== 'heartbeat') {
+                fullAnswer += content;
+                onMessage(content);
+              }
               break;
           }
         } catch (parseError) {
-          console.warn('[HiAgent] SSE 数据解析失败:', dataStr.substring(0, 100));
+          // 尝试提取可能被截断的 JSON 中的 answer
+          const answerMatch = dataStr.match(/"answer"\s*:\s*"([^"]*)"/);
+          if (answerMatch) {
+            const extracted = answerMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+            fullAnswer += extracted;
+            onMessage(extracted);
+          } else {
+            console.warn('[HiAgent] SSE 数据解析失败:', dataStr.substring(0, 100));
+          }
         }
       }
     }
@@ -281,13 +344,23 @@ function parseSSEStream(stream, onMessage, onComplete, onError) {
       if (trimmed.startsWith('data:')) {
         try {
           const data = JSON.parse(trimmed.substring(5).trim());
-          if (data.answer) fullAnswer += data.answer;
+          const content = data.answer || data.content || data.text || data.message || data.output || '';
+          if (content) fullAnswer += content;
           if (data.conversation_id) conversationId = data.conversation_id;
-          if (data.id) messageId = data.id;
-        } catch (e) { /* ignore */ }
+          if (data.id || data.task_id) messageId = data.id || data.task_id;
+        } catch (e) { 
+          // 尝试提取可能被截断的 JSON 中的内容
+          const answerMatch = trimmed.match(/"answer"\s*:\s*"([^"]*)"/);
+          if (answerMatch) {
+            fullAnswer += answerMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+          }
+        }
       }
     }
-    onComplete(fullAnswer, conversationId, messageId);
+    if (!isCompleted) {
+      isCompleted = true;
+      onComplete(fullAnswer, conversationId, messageId);
+    }
   });
 
   stream.on('error', (error) => {
