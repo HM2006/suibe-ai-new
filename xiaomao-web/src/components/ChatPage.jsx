@@ -363,6 +363,33 @@ function ChatPage() {
       let buffer = ''
       let firstChunkReceived = false
       let streamCompleted = false
+      let pendingContent = ''  // 待显示的缓冲区
+      let isTyping = false      // 是否正在打字
+
+      // 打字机效果函数
+      const typeWriterEffect = async () => {
+        if (isTyping) return
+        isTyping = true
+
+        while (pendingContent.length > 0) {
+          // 每次显示 2-3 个字符，模拟打字效果
+          const batchSize = Math.floor(Math.random() * 2) + 2
+          const charsToShow = pendingContent.slice(0, batchSize)
+          pendingContent = pendingContent.slice(batchSize)
+          fullContent += charsToShow
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+            )
+          )
+
+          // 打字间隔 15-30ms
+          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 15) + 15))
+        }
+
+        isTyping = false
+      }
 
       const processSSELine = (line, eventType = null) => {
         const trimmed = line.trim()
@@ -401,12 +428,9 @@ function ChatPage() {
                 firstChunkReceived = true
                 stopLoadingAnimation()
               }
-              fullContent += content
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
-                )
-              )
+              // 将内容加入待显示缓冲区，触发打字机效果
+              pendingContent += content
+              typeWriterEffect()
             }
           } catch {
             // 解析失败但内容不为空，也显示
@@ -415,12 +439,8 @@ function ChatPage() {
                 firstChunkReceived = true
                 stopLoadingAnimation()
               }
-              fullContent += dataStr
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
-                )
-              )
+              pendingContent += dataStr
+              typeWriterEffect()
             }
           }
         }
@@ -450,6 +470,11 @@ function ChatPage() {
 
       if (buffer.trim()) {
         processSSELine(buffer, currentEventType)
+      }
+
+      // 等待打字机效果完成
+      while (isTyping || pendingContent.length > 0) {
+        await new Promise(r => setTimeout(r, 50))
       }
 
       // 流结束后，如果没有收到任何内容，显示错误信息
