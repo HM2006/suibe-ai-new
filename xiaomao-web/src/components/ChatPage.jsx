@@ -372,8 +372,8 @@ function ChatPage() {
         isTyping = true
 
         while (pendingContent.length > 0) {
-          // 每次显示 2-3 个字符，模拟打字效果
-          const batchSize = Math.floor(Math.random() * 2) + 2
+          // 每次显示 1-2 个字符，模拟打字效果（放慢20%）
+          const batchSize = Math.floor(Math.random() * 2) + 1
           const charsToShow = pendingContent.slice(0, batchSize)
           pendingContent = pendingContent.slice(batchSize)
           fullContent += charsToShow
@@ -384,8 +384,8 @@ function ChatPage() {
             )
           )
 
-          // 打字间隔 15-30ms
-          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 15) + 15))
+          // 打字间隔 18-36ms（放慢20%，原来是15-30ms）
+          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 18) + 18))
         }
 
         isTyping = false
