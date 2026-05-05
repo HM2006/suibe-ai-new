@@ -1029,7 +1029,7 @@ select {
 }
 
 .week-btn {
-  padding: 8px 18px;
+  padding: 10px 18px;
   border-radius: var(--radius-full);
   font-size: var(--body-sm);
   font-weight: 500;
@@ -1037,6 +1037,7 @@ select {
   background: var(--surface-container-lowest);
   transition: all var(--transition-fast);
   white-space: nowrap;
+  margin-top: 4px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1063,10 +1064,10 @@ select {
 
 .schedule-table-header {
   display: grid;
-  grid-template-columns: 80px repeat(7, minmax(90px, 1fr));
+  grid-template-columns: 80px repeat(7, minmax(72px, 1fr));
   background: var(--surface-container-low);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  min-width: 710px;
+  min-width: 584px;
 }
 
 .schedule-table-header .header-cell {
@@ -1079,8 +1080,8 @@ select {
 
 .schedule-table-body {
   display: grid;
-  grid-template-columns: 80px repeat(7, minmax(90px, 1fr));
-  min-width: 710px;
+  grid-template-columns: 80px repeat(7, minmax(72px, 1fr));
+  min-width: 584px;
 }
 
 .time-cell {

@@ -435,9 +435,6 @@ function SchedulePage() {
       <div className="schedule-overview">
         <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
           {weekDays[selectedDay]}课程概览
-          <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '8px' }}>
-            第{selectedWeek}周
-          </span>
         </h3>
         {scheduleData[selectedDay] && scheduleData[selectedDay].length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
